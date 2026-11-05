@@ -1,25 +1,25 @@
-# Camera Ready correspondence and attention
+# Cross-view correspondence and attention
 
 Run from the source repository after installing Pi3's dependencies. This
-evaluation uses the released Pi3 checkpoints, corrected sampling, decoder
+evaluation uses the recorded Pi3 checkpoints, corrected sampling, decoder
 adapter indices 17–24, and scales 0.2 / 0.1 / 0.3.
 On RTX 50-series GPUs, use the root README's CUDA 12.8 installation profile
 instead of the historical Torch 2.5.1 requirements.
 
 ```bash
-bash experiments/run_correspondence.sh \
+python -m adapter3r.analysis.correspondence \
   --data-root OXFORD_DATA --weights-root RELEASE_WEIGHTS \
   --seed 1111 --gpu 0 --protocol pilot --base --verify-hooks --output NEW_PILOT
-bash experiments/run_correspondence.sh \
+python -m adapter3r.analysis.correspondence \
   --data-root OXFORD_DATA --weights-root RELEASE_WEIGHTS \
   --seed 1111 --gpu 0 --protocol full --base --verify-hooks --output NEW_RUNS/full1111
-bash experiments/run_correspondence.sh \
+python -m adapter3r.analysis.correspondence \
   --data-root OXFORD_DATA --weights-root RELEASE_WEIGHTS \
   --seed 1112 --gpu 1 --protocol full --verify-hooks --output NEW_RUNS/full1112
-bash experiments/run_correspondence.sh \
+python -m adapter3r.analysis.correspondence \
   --data-root OXFORD_DATA --weights-root RELEASE_WEIGHTS \
   --seed 1113 --gpu 2 --protocol full --verify-hooks --output NEW_RUNS/full1113
-python experiments/correspondence_summary.py --data NEW_RUNS --output NEW_SUMMARY
+python -m adapter3r.analysis.correspondence_summary --data NEW_RUNS --output NEW_SUMMARY
 ```
 
 `--preflight` checks selected frame paths, source inventories and checkpoint
@@ -32,7 +32,7 @@ For parallel inference, launch independent runs with `--shards N --shard I`
 for every `I` from 0 to `N-1`, then merge them before full-run aggregation:
 
 ```bash
-python experiments/correspondence_merge.py \
+python -m adapter3r.analysis.correspondence_merge \
   --inputs RUN_SHARD0 RUN_SHARD1 RUN_SHARD2 RUN_SHARD3 --output NEW_RUNS/full1111
 ```
 
@@ -85,7 +85,7 @@ provenance manifests and frozen-backbone hash evidence. Recompute the paper
 table from these records without a GPU:
 
 ```bash
-python experiments/correspondence_summary.py \
+python -m adapter3r.analysis.correspondence_summary \
   --data results/correspondence --output NEW_RECORDED_SUMMARY
 ```
 
@@ -104,8 +104,8 @@ every measured rank and using PCHIP interpolation. SciPy and Matplotlib are
 required for rendering.
 
 ```bash
-python experiments/correspondence_profile.py --run NEW_RUNS/full1111 --output NEW_PROFILE
-python experiments/correspondence_profile.py --output NEW_RECORDED_PROFILE
+python -m adapter3r.analysis.correspondence_profile --run NEW_RUNS/full1111 --output NEW_PROFILE
+python -m adapter3r.analysis.correspondence_profile --output NEW_RECORDED_PROFILE
 ```
 
 The second command uses the included original profile CSV. Day is orange and

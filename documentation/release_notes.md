@@ -1,4 +1,21 @@
-# 3R-Adapter v0.1.0 source release
+# Release history
+
+## v0.1.1
+
+Training, evaluation and test-time adaptation now use one `adapter3r` package
+and the `train`, `evaluate` and `adapt` commands. Training accepts `--data-root`
+for portable Oxford/BEDLAM configuration. Older entrypoints forward to the
+same package implementations. Process documentation is under `documentation/`.
+
+The existing 34 tests, command help, actual Hydra configuration composition
+and package runtime smoke checks passed. The shared core and five bundled
+backbone source inventories are unchanged. These checks do not constitute
+full CUDA training or evaluation.
+
+Adapter checkpoints are still unpublished. The README links the official
+Pi3/CUT3R base weights and provides adaptation commands.
+
+## v0.1.0
 
 The README follows the lab's GAPrompt++ repository format. The current project
 page and supplied two-minute video are hosted as Release assets and deployed
@@ -57,4 +74,4 @@ unverified after isolated server environments could not reach PyPI.
 
 Model weights are distributed separately; their download endpoints remain
 unavailable. The original code has no repository-wide open-source license
-yet, as stated in `LICENSE_STATUS.md`. Third-party licenses are retained.
+yet, as stated in `../LICENSE_STATUS.md`. Third-party licenses are retained.

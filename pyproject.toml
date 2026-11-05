@@ -4,14 +4,17 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "adapter3r"
-version = "0.1.0"
-description = "A minimal, standalone implementation of 3R-Adapter and its public evaluation utilities"
+version = "0.1.1"
+description = "3R-Adapter with shared training, evaluation and test-time adaptation runners"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = ["torch>=2.0"]
 
 [project.optional-dependencies]
 test = ["pytest>=7"]
+
+[project.scripts]
+adapter3r = "adapter3r.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["adapter3r*"]

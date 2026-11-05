@@ -10,7 +10,7 @@ Official base weights for adaptation:
 - [CUT3R 512 DPT checkpoint](https://drive.google.com/file/d/1Asz-ZB3FfpzZYwunhQvNPZEUA8XUNAYD/view),
   `cut3r_512_dpt_4_64.pth`.
 
-The [README adaptation commands](README.md#low-light-reconstruction-and-camera-pose-estimation)
+The [README adaptation commands](../README.md#low-light-reconstruction-and-camera-pose-estimation)
 start from these base weights and produce a new adapted checkpoint.
 
 ## Historical three-seed checkpoint inventory
