@@ -52,7 +52,11 @@ segmentation and SMPL annotations, plus the training split.
 The Human3R asset root contains `smpl/`, `smplx/`, `smpl_mean_params.npz` and
 the model files required by the backbone.
 
-Training requires CUT3R base weights, Multi-HMR weights and `--model-assets`.
+BEDLAM uses the CUT3R scene backbone with Human3R's joint reconstruction
+implementation and Multi-HMR human components. The `--backbone human3r`
+selector identifies this implementation, not the source of pretrained weights.
+Training initializes from CUT3R base weights and Multi-HMR weights, rather
+than a trained Human3R checkpoint, and requires `--model-assets`.
 `--data-root` configures both BEDLAM training and validation paths.
 The preset uses decoder adapters 8–11, residual scale 0.5 and 40 epochs.
 Evaluation includes human, scene and depth metrics, with frame subsample 25.

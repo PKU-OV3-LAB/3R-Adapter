@@ -140,16 +140,19 @@ python -m adapter3r adapt --dataset nrgbd \
 
 ## Joint human-scene reconstruction
 
-Train on processed BEDLAM with the Human3R model assets, then evaluate:
+Following Human3R's joint reconstruction pipeline, initialize the scene
+backbone from **CUT3R** and the human branch from **Multi-HMR**, then adapt
+on BEDLAM. In these commands, `human3r` selects the joint reconstruction
+implementation; it does not denote a pretrained Human3R checkpoint.
 
 ```bash
 python -m adapter3r train --backbone human3r \
   --pretrained CUT3R_BASE_WEIGHTS --pretrained-human MULTIHMR_WEIGHTS \
   --model-assets HUMAN3R_MODEL_ASSETS --data-root PROCESSED_BEDLAM \
-  --seed 0 --gpu 0 --output-dir outputs/human3r
+  --seed 0 --gpu 0 --output-dir outputs/bedlam
 
 python -m adapter3r evaluate --backbone human3r \
-  --checkpoint outputs/human3r/checkpoint-best.pth \
+  --checkpoint outputs/bedlam/checkpoint-best.pth \
   --data-root PROCESSED_BEDLAM --model-assets HUMAN3R_MODEL_ASSETS \
   --gpu 0 --output-dir outputs/bedlam_eval
 ```

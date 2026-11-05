@@ -65,7 +65,9 @@
     },
     "table_3": {
       "dataset": "BEDLAM",
-      "backbone": "Human3R",
+      "backbone": "CUT3R",
+      "integration": "Human3R joint human-scene reconstruction",
+      "human_initialization": "Multi-HMR",
       "adapter_parameters_millions": 36.1,
       "scene_reconstruction_paper": {
         "depth_cutoff_m": 15,
