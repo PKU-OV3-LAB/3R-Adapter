@@ -15,7 +15,7 @@ authors:
   - family-names: Zhou
     given-names: Jiahuan
     affiliation: Peking University
-version: 0.1.0
-date-released: 2026-11-05
-repository-code: "https://github.com/PKU-OV3-LAB/NeurIPS2026-3R-Adapter"
-url: "https://pku-ov3-lab.github.io/NeurIPS2026-3R-Adapter/"
+version: 0.1.2
+date-released: 2026-11-06
+repository-code: "https://github.com/PKU-OV3-LAB/3R-Adapter"
+url: "https://pku-ov3-lab.github.io/3R-Adapter/"

@@ -17,13 +17,13 @@
 
 <p align="center">
   <strong>NeurIPS 2026 Spotlight</strong><br>
-  <a href="https://pku-ov3-lab.github.io/NeurIPS2026-3R-Adapter/">Project Page</a> ·
-  <a href="https://pku-ov3-lab.github.io/NeurIPS2026-3R-Adapter/assets/3r-adapter-paper.pdf">Paper</a> ·
-  <a href="https://pku-ov3-lab.github.io/NeurIPS2026-3R-Adapter/#video">Video</a>
+  <a href="https://pku-ov3-lab.github.io/3R-Adapter/">Project Page</a> ·
+  <a href="https://pku-ov3-lab.github.io/3R-Adapter/assets/3r-adapter-paper.pdf">Paper</a> ·
+  <a href="https://pku-ov3-lab.github.io/3R-Adapter/#video">Video</a>
 </p>
 
 <p align="center">
-  <img src="https://pku-ov3-lab.github.io/NeurIPS2026-3R-Adapter/assets/pipeline.png" width="100%" alt="3R-Adapter pipeline">
+  <img src="https://pku-ov3-lab.github.io/3R-Adapter/assets/pipeline.png" width="100%" alt="3R-Adapter pipeline">
 </p>
 
 Official implementation of **3R-Adapter**, a relation-centric framework for
@@ -35,8 +35,8 @@ recovered relations into a frozen backbone.
 ## Installation
 
 ```bash
-git clone https://github.com/PKU-OV3-LAB/NeurIPS2026-3R-Adapter.git
-cd NeurIPS2026-3R-Adapter
+git clone https://github.com/PKU-OV3-LAB/3R-Adapter.git
+cd 3R-Adapter
 python -m pip install -e .
 ```
 
