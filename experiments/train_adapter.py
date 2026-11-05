@@ -32,6 +32,9 @@ def main():
     overrides = training_overrides(config, args.seed, overrides)
     if not overrides:
         raise ValueError("provide the upstream Hydra training config and dataset/budget overrides")
+    if config is None and args.seed is not None:
+        seed_key = "random_seed" if args.backbone == "pi3" else "seed"
+        overrides.append(f"{seed_key}={args.seed}")
     if any("resume=" in value and not value.endswith("resume=null") for value in overrides):
         raise ValueError("this entry requires fresh training from base weights")
     os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu

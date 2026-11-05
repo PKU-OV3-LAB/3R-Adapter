@@ -38,7 +38,7 @@ reconstruction, test-time adaptation, and joint human-scene reconstruction.
 
 ```bash
 git clone https://github.com/PKU-OV3-LAB/NeurIPS2026-3R-Adapter.git
-# Run the remaining commands from the cloned repository.
+cd NeurIPS2026-3R-Adapter
 python -m pip install -e ".[test]"
 python -m pytest
 ```
@@ -68,88 +68,162 @@ their original dataset terms and the layouts in
 Human3R model-asset paths explicitly. No datasets or model weights are stored
 in Git.
 
-[WEIGHTS.md](WEIGHTS.md) records the available checkpoint inventories and
-their provenance. Download endpoints for model checkpoints are not yet
-available. Historical checkpoint records and the November Oxford retraining
-results are kept separate.
+Trained **3R-Adapter checkpoints are not yet published**. Download the official
+base weights below, then train the adapter using the adaptation commands.
 
-## Tasks
+- **Pi3:** [official model](https://huggingface.co/yyfz233/Pi3),
+  [model.safetensors](https://huggingface.co/yyfz233/Pi3/resolve/main/model.safetensors).
+  Use the original Pi3 model for the bundled integration.
+- **CUT3R:** [official 512 DPT checkpoint](https://drive.google.com/file/d/1Asz-ZB3FfpzZYwunhQvNPZEUA8XUNAYD/view),
+  `cut3r_512_dpt_4_64.pth`.
 
-| Paper table | Backbone / dataset | Entry point |
-|---|---|---|
-| Table 1 | Pi3 / Oxford Day&Night | `experiments/run_table1_pi3.sh` |
-| Table 1 | CUT3R / Oxford Day&Night | `experiments/run_table1_cut3r.sh` |
-| Table 2 | Test3R / 7-Scenes | `experiments/run_table2_test3r_7scenes.sh` |
-| Table 2 | Test3R / NRGBD | `experiments/run_table2_test3r_nrgbd.sh` |
-| Table 3 | Human3R / BEDLAM | `experiments/run_table3_human3r_bedlam.sh` |
-| Table 4 | Pi3 / Oxford Day&Night | `experiments/run_correspondence.sh` |
+```bash
+mkdir -p checkpoints/Pi3 checkpoints/CUT3R
 
-Run commands from the repository root:
+curl -fL https://huggingface.co/yyfz233/Pi3/resolve/main/model.safetensors \
+  -o checkpoints/Pi3/model.safetensors
+curl -fL https://huggingface.co/yyfz233/Pi3/resolve/main/config.json \
+  -o checkpoints/Pi3/config.json
+
+python -m pip install gdown
+gdown 1Asz-ZB3FfpzZYwunhQvNPZEUA8XUNAYD \
+  -O checkpoints/CUT3R/cut3r_512_dpt_4_64.pth
+```
+
+Keep Pi3's `config.json` beside `model.safetensors`; its evaluation loader
+uses this directory to initialize the backbone. [WEIGHTS.md](WEIGHTS.md)
+contains the historical checkpoint inventory and provenance.
+
+## Low-light reconstruction and camera pose estimation
+
+Run the following commands from the repository root, with the processed
+Oxford Day&Night dataset:
+
+```bash
+export OXFORD_DATA=/absolute/path/to/processed/oxford-day-and-night
+```
+
+### Pi3 + 3R-Adapter
+
+Start from the official Pi3 weights and train only the adapter:
+
+```bash
+python experiments/train_adapter.py --backbone pi3 \
+  --pretrained checkpoints/Pi3/model.safetensors \
+  --seed 1111 --gpu 0 --output-dir outputs/pi3_seed1111 \
+  "train_dataset.OxfordDayAndNight.data_root=$OXFORD_DATA" \
+  "test_dataset.OxfordDayAndNight.data_root=$OXFORD_DATA"
+```
+
+The preset uses decoder layers **17–24**, residual scale **0.3**, and 20 epochs
+of 800 updates. The selected checkpoint is
+`outputs/pi3_seed1111/ckpts/best_model/pytorch_model.bin`.
+
+Evaluate the newly trained model:
 
 ```bash
 bash experiments/run_table1_pi3.sh \
-  --checkpoint PI3_ADAPTER_CHECKPOINT --pretrained PI3_BASE_DIRECTORY \
-  --data-root OXFORD_DATA --gpu 0 --output-root NEW_PI3_RESULTS --task all
-
-bash experiments/run_table1_cut3r.sh \
-  --checkpoint CUT3R_ADAPTER_CHECKPOINT --data-root OXFORD_DATA \
+  --release-config none \
+  --checkpoint outputs/pi3_seed1111/ckpts/best_model/pytorch_model.bin \
+  --pretrained checkpoints/Pi3 \
   --grid-layout pixel_center --sampling-layout reference_major \
-  --gpu 0 --output-root NEW_CUT3R_RESULTS --task all
+  --residual-scale 0.3 \
+  --data-root "$OXFORD_DATA" --gpu 0 \
+  --output-root outputs/pi3_seed1111_eval --task all
 ```
 
-Pi3 adapters must be attached to decoder layers **17–24**. CUT3R retains
-encoder residual scale **0.3** and decoder residual scale **0.5**. The CUT3R
-scene runner preserves the original center-224 evaluation entry; the
-November full-image results use a separately documented Oxford protocol.
+`--release-config none` accepts your own trained checkpoint. The historical
+release preset checks checkpoint hashes against the archived inventory.
 
-[experiments/README.md](experiments/README.md) provides the complete
-evaluation and fresh-training commands.
-[experiments/correspondence_README.md](experiments/correspondence_README.md)
-describes the independent fixed-input correspondence measurements.
-BEDLAM uses a **15 m scene cutoff**; depth `max_depth=16` is a separate setting.
+### CUT3R + 3R-Adapter
 
-## Sampling and result provenance
-
-```python
-from adapter3r import Adapter3R
-
-adapter = Adapter3R(
-    1024, 128, K_sample=4,
-    grid_layout="pixel_center",
-    sampling_layout="reference_major",
-)
-```
-
-Use `legacy` layouts for checkpoints trained with the historical forward
-path. Corrected layouts are `pixel_center` and `reference_major`; parameter
-shapes remain compatible, but layouts must match the training run.
-
-Pi3 and CUT3R have each completed three fresh Oxford training runs with the
-corrected sampling path, starting from base pretrained weights. Pi3's
-sequence-to-global frame indexing was corrected; CUT3R's training loader
-already used the correct mapping. Numerical records and protocol definitions
-are in [results/oxford_20261105](results/oxford_20261105).
-
-The original paper values remain in `results/public_results.json`, historical
-checkpoint metrics in `results/release_3seed_results.json`, and the fixed-input
-Table 4 evidence in `results/correspondence/`. Different evaluation protocols
-must not be mixed into a single ranking.
-
-## Project page and video
-
-The website, paper, figures, fonts and supplied two-minute video are
-distributed as **GitHub Release assets**, outside Git history.
-GitHub Pages deploys `project-page.zip` from the release. An ordinary
-`git clone`, including a clone fetching all branches, downloads the code
-without the project page or video.
-
-To download the website separately:
+Start from the official CUT3R 512 DPT weights. Explicit dataset overrides
+replace the example paths in the bundled training configuration:
 
 ```bash
-gh release download v0.1.0 \
-  --repo PKU-OV3-LAB/NeurIPS2026-3R-Adapter \
-  --pattern project-page.zip --dir WEBSITE_DOWNLOAD
+python experiments/train_adapter.py --backbone cut3r \
+  --pretrained checkpoints/CUT3R/cut3r_512_dpt_4_64.pth \
+  --grid-layout pixel_center --sampling-layout reference_major \
+  --seed 1111 --gpu 0 --output-dir outputs/cut3r_seed1111 \
+  --config-name cut3r-3RAdapter \
+  "train_dataset=\"4000 @ OxfordDayAndNight(allow_repeat=True, split='train', ROOT='$OXFORD_DATA', aug_crop=16, resolution=[(512,384),(512,336),(512,288),(512,256),(512,208),(512,144),(384,512),(336,512),(288,512),(256,512)], transform=SeqColorJitter, num_views=4, n_corres=0)\"" \
+  "test_dataset=\"1000 @ OxfordDayAndNight(split='test', ROOT='$OXFORD_DATA', resolution=224, num_views=4, seed=42, n_corres=0)\""
 ```
+
+The configuration trains adapters at encoder layers **20–23** and decoder
+layers **8–11**, with residual scales **0.3** and **0.5**, respectively.
+Training uses 20 epochs, 4,000 samples per epoch, batch size 8 and learning rate
+`2e-3`. The selected checkpoint is
+`outputs/cut3r_seed1111/checkpoint-best.pth`.
+
+Evaluate the newly trained model:
+
+```bash
+bash experiments/run_table1_cut3r.sh \
+  --checkpoint outputs/cut3r_seed1111/checkpoint-best.pth \
+  --grid-layout pixel_center --sampling-layout reference_major \
+  --data-root "$OXFORD_DATA" --gpu 0 \
+  --output-root outputs/cut3r_seed1111_eval --task all
+```
+
+Both backbones freeze their pretrained parameters during adaptation and use
+`pixel_center` / `reference_major` sampling. Repeat with seeds 1112 and 1113
+and distinct output directories to report a three-seed mean and sample
+standard deviation. Append `--preflight` to a training command to inspect its
+resolved arguments without starting training.
+
+The CUT3R scene runner preserves center-224 scoring with ScaleShiftInv and
+ICP 0.1 m. The November full-image comparisons use a separate Oxford
+protocol; see [results/oxford_20261105](results/oxford_20261105).
+
+## Self-supervised test-time adaptation
+
+Use the Test3R integration to optimize 3R-Adapter from a base DUSt3R checkpoint
+on each unlabeled test sequence:
+
+```bash
+bash experiments/run_table2_test3r_7scenes.sh \
+  --checkpoint DUST3R_BASE_WEIGHTS --data-root SEVENSCENES_DATA \
+  --gpu 0 --output-dir outputs/tta_7scenes
+
+bash experiments/run_table2_test3r_nrgbd.sh \
+  --checkpoint DUST3R_BASE_WEIGHTS --data-root NRGBD_DATA \
+  --gpu 0 --output-dir outputs/tta_nrgbd
+```
+
+The runners cover all 18 7-Scenes sequences and all nine NRGBD sequences,
+with strides 200 and 500. Each sequence starts from base weights; online
+optimization uses two epochs. See [experiments/README.md](experiments/README.md)
+for learning rates and optional controls.
+
+## Joint human-scene reconstruction
+
+The Human3R integration evaluates human mesh, scene and depth reconstruction
+on processed BEDLAM. Train an adapted model using the Human3R commands in
+[experiments/README.md](experiments/README.md), then supply the resulting
+checkpoint and the required SMPL/SMPL-X model assets:
+
+```bash
+bash experiments/run_table3_human3r_bedlam.sh \
+  --release-config none --checkpoint HUMAN3R_ADAPTER_CHECKPOINT \
+  --grid-layout pixel_center --sampling-layout reference_major \
+  --residual-scale 0.5 \
+  --data-root PROCESSED_BEDLAM --model-assets HUMAN3R_MODEL_ASSETS \
+  --gpu 0 --output-dir outputs/bedlam_eval
+```
+
+The scene cutoff is **15 m**; depth `max_depth=16` is a separate metric setting.
+
+## Cross-view correspondence analysis
+
+Use [experiments/correspondence_README.md](experiments/correspondence_README.md)
+for fixed Oxford inputs, passive attention measurements, learned offset
+retrieval diagnostics and three-seed aggregation. Original numerical records
+are included in `results/correspondence/`.
+
+Historical checkpoints require `legacy` sampling layouts; newly trained
+checkpoints require their training layouts. Paper values, historical
+checkpoint metrics and November retraining results are recorded separately.
 
 ## Citation
 
@@ -165,13 +239,11 @@ gh release download v0.1.0 \
 
 ## Acknowledgements
 
-We thank the authors of Pi3, CUT3R, Test3R, Human3R, DUSt3R, CroCo, DINOv2 and
-Multi-HMR. Pinned sources, original notices and licenses are retained in
-`third_party/`; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
-
-## License
-
-No repository-wide open-source license has been granted for the original
-3R-Adapter code. See [LICENSE_STATUS.md](LICENSE_STATUS.md). Third-party source,
-derivative patches, datasets and model assets retain their respective terms,
-including applicable non-commercial restrictions.
+We thank the authors of [Pi3](https://github.com/yyfz/Pi3),
+[CUT3R](https://github.com/CUT3R/CUT3R),
+[Test3R](https://github.com/nopQAQ/Test3R),
+[Human3R](https://github.com/fanegg/Human3R),
+[DUSt3R](https://github.com/naver/dust3r),
+[CroCo](https://github.com/naver/croco),
+[DINOv2](https://github.com/facebookresearch/dinov2) and
+[Multi-HMR](https://github.com/naver/multi-hmr) for sharing their work.

@@ -1,8 +1,23 @@
-# Three-seed checkpoint release
+# Pretrained weights and adapter checkpoints
 
-The release consists of six independent validation-selected checkpoints.
-They use the fixed presets in `configs/release/`. The checkpoint files are
-distributed separately from this source package.
+Trained 3R-Adapter checkpoints are not yet available for public download.
+The current GitHub Release contains website and video assets only.
+
+Official base weights for adaptation:
+
+- [Pi3 model.safetensors](https://huggingface.co/yyfz233/Pi3/resolve/main/model.safetensors)
+  and [config.json](https://huggingface.co/yyfz233/Pi3/resolve/main/config.json).
+- [CUT3R 512 DPT checkpoint](https://drive.google.com/file/d/1Asz-ZB3FfpzZYwunhQvNPZEUA8XUNAYD/view),
+  `cut3r_512_dpt_4_64.pth`.
+
+The [README adaptation commands](README.md#low-light-reconstruction-and-camera-pose-estimation)
+start from these base weights and produce a new adapted checkpoint.
+
+## Historical three-seed checkpoint inventory
+
+The inventory contains six independent validation-selected checkpoints using
+the fixed presets in `configs/release/`. Their metadata is included for
+provenance; the checkpoint files are not included in this release.
 
 | Backbone | Seeds | Checkpoint size per seed | Selection |
 |---|---|---|---|

@@ -1,9 +1,23 @@
 """Install adapters inside the training process, then execute upstream training."""
 import argparse
 from pathlib import Path
-import runpy
 import sys
-from runtime import paths, install_adapter
+from types import ModuleType
+from runtime import paths, install_adapter, source_tree
+
+
+def run_training_source(source):
+    """Execute the original entry with the caller's GPU selection preserved."""
+    source = Path(source)
+    module = ModuleType("__main__")
+    module.__file__ = str(source)
+    module.__package__ = ""
+    previous = sys.modules["__main__"]
+    try:
+        sys.modules["__main__"] = module
+        exec(compile(source_tree(source), str(source), "exec"), module.__dict__)
+    finally:
+        sys.modules["__main__"] = previous
 
 
 def main():
@@ -41,7 +55,7 @@ def main():
                         args.fusion_factor, args.residual_scale)
         source = command[1]
         sys.argv = [source, *command[2:]]
-        runpy.run_path(source, run_name="__main__")
+        run_training_source(source)
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-# Paper Table 1 / 2 / 3 / 4
+# Adaptation and evaluation tasks
 
 Run from the repository root after installing this package and the relevant
 backbone's dependencies. All required backbone source is in `third_party/`;
@@ -6,27 +6,31 @@ no external checkout or Git submodule initialization is needed. `--repo` can
 select an alternative source tree. Model weights and data are explicit inputs.
 Outputs must be fresh directories.
 
-## Table 1
+## Low-light reconstruction and camera pose estimation
 
 ```bash
 bash experiments/run_table1_pi3.sh \
-  --weights-root RELEASE_WEIGHTS --seed 1111 --pretrained PI3_BASE_DIRECTORY \
+  --release-config none --checkpoint YOUR_PI3_ADAPTER_WEIGHTS \
+  --pretrained PI3_BASE_DIRECTORY \
+  --grid-layout pixel_center --sampling-layout reference_major --residual-scale 0.3 \
   --data-root OXFORD_DATA --gpu 1 --output-root NEW_PI3_RESULTS --task all
 bash experiments/run_table1_cut3r.sh \
   --checkpoint CUT3R_ADAPTER_WEIGHTS --data-root OXFORD_DATA \
+  --grid-layout pixel_center --sampling-layout reference_major \
   --gpu 1 --output-root NEW_CUT3R_RESULTS --task all
 ```
 
 Pi3 uses decoder layers 17–24. Both methods include scene reconstruction and
 relative pose. Oxford uses within-scene day/night inputs, stride 2, with CUT3R
-limited to 20 frames. Pi3 defaults to `configs/release/pi3_3seed.json`, using
-corrected layouts and scales. Run seeds 1111, 1112 and 1113 in separate output
-directories for the three-seed mean. Historical Pi3 checkpoints require
+limited to 20 frames. Pi3's default `configs/release/pi3_3seed.json` validates
+historical release checkpoint hashes; use `--release-config none` for your own
+trained checkpoint. Run seeds 1111, 1112 and 1113 in separate output directories
+for the three-seed mean. Historical Pi3 checkpoints require
 `--release-config none --checkpoint HISTORICAL_WEIGHTS --grid-layout legacy
 --sampling-layout legacy`. CUT3R retains its historical defaults.
 Both runners accept `--preflight`; Pi3 resolves the full Hydra configuration.
 
-## Table 2
+## Self-supervised test-time adaptation
 
 ```bash
 bash experiments/run_table2_test3r_7scenes.sh \
@@ -44,7 +48,7 @@ and odd decoder layers 1–11. Learning rates are `1e-5` and `9e-5`.
 The historical TTA loss uses `with_conf=False`. Both runners accept
 `--epochs`, `--lr`, `--accum-iter` and `--preflight`.
 
-## Table 3
+## Joint human-scene reconstruction
 
 ```bash
 bash experiments/run_table3_human3r_bedlam.sh \
@@ -66,16 +70,25 @@ The default `configs/release/human3r_3seed.json` uses residual scale 0.5 and
 corrected layouts. Run seeds 0, 1 and 2 separately for the three-seed mean.
 Use `--release-config none` with explicit layouts/scales for historical weights.
 
-## Training
+## Adapter training from official base weights
+
+Official downloads and complete Pi3/CUT3R adaptation commands are in the
+[repository README](../README.md#data-and-pretrained-weights). For the
+commands below, set `OXFORD_DATA` to the absolute processed dataset path.
 
 ```bash
 python experiments/train_adapter.py --backbone pi3 \
-  --pretrained PI3_BASE_WEIGHTS --seed 1111 --gpu 1 --output-dir NEW_TRAINING \
-  train_dataset.OxfordDayAndNight.data_root=OXFORD_DATA \
-  test_dataset.OxfordDayAndNight.data_root=OXFORD_DATA
+  --pretrained checkpoints/Pi3/model.safetensors \
+  --seed 1111 --gpu 1 --output-dir NEW_TRAINING \
+  "train_dataset.OxfordDayAndNight.data_root=$OXFORD_DATA" \
+  "test_dataset.OxfordDayAndNight.data_root=$OXFORD_DATA"
 python experiments/train_adapter.py --backbone cut3r \
-  --pretrained CUT3R_BASE_WEIGHTS --gpu 1 --output-dir NEW_CUT_TRAINING \
-  --config-name cut3r-3RAdapter
+  --pretrained checkpoints/CUT3R/cut3r_512_dpt_4_64.pth \
+  --grid-layout pixel_center --sampling-layout reference_major \
+  --seed 1111 --gpu 1 --output-dir NEW_CUT_TRAINING \
+  --config-name cut3r-3RAdapter \
+  "train_dataset=\"4000 @ OxfordDayAndNight(allow_repeat=True, split='train', ROOT='$OXFORD_DATA', aug_crop=16, resolution=[(512,384),(512,336),(512,288),(512,256),(512,208),(512,144),(384,512),(336,512),(288,512),(256,512)], transform=SeqColorJitter, num_views=4, n_corres=0)\"" \
+  "test_dataset=\"1000 @ OxfordDayAndNight(split='test', ROOT='$OXFORD_DATA', resolution=224, num_views=4, seed=42, n_corres=0)\""
 python experiments/train_adapter.py --backbone human3r \
   --pretrained CUT3R_BASE_WEIGHTS --pretrained-human MULTIHMR_WEIGHTS \
   --model-assets HUMAN3R_MODEL_ASSETS --seed 0 --gpu 1 --output-dir NEW_HUMAN_TRAINING \
@@ -90,7 +103,7 @@ CUT3R/Human3R dataset expressions live in their bundled configs. Human3R uses
 adapter layers 8–11. Training starts from pretrained base weights with resume
 disabled. Use `--preflight` to inspect the command before a full run.
 
-## Table 4 and the attention distribution figure
+## Cross-view correspondence and attention distributions
 
 See [correspondence_README.md](correspondence_README.md) for the fixed Oxford
 selection, passive attention readout, all-offset coverage and paired
