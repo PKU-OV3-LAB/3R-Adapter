@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "weights_averaged": false,
+  "checkpoint_format": "original validation-selected full checkpoint",
+  "checkpoints": [
+    {
+      "backbone": "pi3", "seed": 1111,
+      "file": "pi3/seed1111/pytorch_model.bin", "bytes": 3848092877,
+      "sha256": "9af9f497c8f33e1c2b0afe55ee9a11e7ed0997c5dc3b4565e960439f77a22e45",
+      "checkpoint_epoch": 0, "selection_rule": "minimum val_loss",
+      "source_run": "t1_r0p2_a0p1_g0p3_s1111"
+    },
+    {
+      "backbone": "pi3", "seed": 1112,
+      "file": "pi3/seed1112/pytorch_model.bin", "bytes": 3848092877,
+      "sha256": "88ab28cb540239bce04df3471500eaec436dc3d782b0c1093a327445ab106fbc",
+      "checkpoint_epoch": 0, "selection_rule": "minimum val_loss",
+      "source_run": "t1_r0p2_a0p1_g0p3_s1112"
+    },
+    {
+      "backbone": "pi3", "seed": 1113,
+      "file": "pi3/seed1113/pytorch_model.bin", "bytes": 3848092877,
+      "sha256": "9e549eaac29f0493ebf1d9418ff4117b04e80d9cdc15f6063261a5f9cf176d3b",
+      "checkpoint_epoch": 0, "selection_rule": "minimum val_loss",
+      "source_run": "t1_r0p2_a0p1_g0p3_s1113"
+    },
+    {
+      "backbone": "human3r", "seed": 0,
+      "file": "human3r/seed0/checkpoint-best.pth", "bytes": 4833084106,
+      "sha256": "6751cb3078cb2cd1cc09ea783c035469cec1766a6eab0a4f7b8b4e51e37f379e",
+      "checkpoint_epoch": 28, "selection_rule": "minimum validation median loss",
+      "source_run": "t3_r0p2_a0p1_g0p5_s0"
+    },
+    {
+      "backbone": "human3r", "seed": 1,
+      "file": "human3r/seed1/checkpoint-best.pth", "bytes": 4833084106,
+      "sha256": "659bb47e4a330a034bfbe467caa189685003110b467e67382f32ef663a90e158",
+      "checkpoint_epoch": 39, "selection_rule": "minimum validation median loss",
+      "source_run": "t3_r0p2_a0p1_g0p5_s1"
+    },
+    {
+      "backbone": "human3r", "seed": 2,
+      "file": "human3r/seed2/checkpoint-best.pth", "bytes": 4833084106,
+      "sha256": "700fb869d1a24764725bbc113bf06d32623f5045090ffde63867f0d6dced7769",
+      "checkpoint_epoch": 28, "selection_rule": "minimum validation median loss",
+      "source_run": "t3_r0p2_a0p1_g0p5_s2"
+    }
+  ],
+  "base_weights": {
+    "pi3": {
+      "model.safetensors": "33580e4702ac671558aedeab1148fd08118f7ce45bdbeb99f3e3cf340062875d"
+    },
+    "human3r": {
+      "cut3r_512_dpt_4_64.pth": "45f7e98a0a64dbeb54901ae2b878cd8cd125f20a4497316483f0bd6f109f8103",
+      "multiHMR_896_L.pt": "c1b55933eb35df9b27966e1d8d3a69c4bc5e28eee0f0dd7f0cdc41c3f27202ca"
+    }
+  }
+}

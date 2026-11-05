@@ -1,0 +1,1182 @@
+--- a/src/dust3r/model.py
++++ b/src/dust3r/model.py
+@@ -1,5 +1,6 @@
+ import sys
+ import os
++import math
+ sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+ from collections import OrderedDict
+ import torch
+@@ -24,6 +25,14 @@
+ from dust3r.blocks import Block, DecoderBlock, Mlp, Attention, CrossAttention, DropPath, CustomDecoderBlock
+ inf = float('inf')
+ from accelerate.logging import get_logger
++
++def _env_float(name, default, *, minimum=0.0, maximum=None):
++    value = float(os.environ.get(name, default))
++    if not math.isfinite(value) or value < minimum:
++        raise ValueError(f'{name} must be finite and >= {minimum}, got {value}')
++    if maximum is not None and value > maximum:
++        raise ValueError(f'{name} must be <= {maximum}, got {value}')
++    return value
+ from dust3r.smpl_model import nms, apply_threshold
+ from einops import rearrange
+ from dust3r.utils.geometry import inverse_perspective_projection, get_camera_parameters
+@@ -31,6 +40,7 @@
+ from mhmr.blocks import Dinov2Backbone, FourierPositionEncoding, TransformerDecoder
+ printer = get_logger(__name__, log_level='DEBUG')
+ from dust3r.utils.device import to_cpu, to_gpu
++from dust3r.modules import Adapter, DeformableAdapterHighRank, DeformableAdapterLowRank, Adapter3R
+ 
+ @dataclass
+ class ARCroco3DStereoOutput(ModelOutput):
+@@ -81,7 +91,7 @@
+ class ARCroco3DStereoConfig(PretrainedConfig):
+     model_type = 'arcroco_3d_stereo'
+ 
+-    def __init__(self, output_mode='pts3d', head_type='linear', depth_mode=('exp', -float('inf'), float('inf')), conf_mode=('exp', 1, float('inf')), pose_mode=('exp', -float('inf'), float('inf')), freeze='none', landscape_only=True, patch_embed_cls='PatchEmbedDust3R', ray_enc_depth=2, state_size=324, local_mem_size=256, state_pe='2d', state_dec_num_heads=16, depth_head=False, rgb_head=False, pose_conf_head=False, pose_head=False, msk_head=False, use_prompt=False, visual_prompt_number=10, use_adapter=False, reduction_dim=128, peft_layers=[], backbone='dinov2_vitl14', mhmr_img_res=None, **croco_kwargs):
++    def __init__(self, output_mode='pts3d', head_type='linear', depth_mode=('exp', -float('inf'), float('inf')), conf_mode=('exp', 1, float('inf')), pose_mode=('exp', -float('inf'), float('inf')), freeze='none', landscape_only=True, patch_embed_cls='PatchEmbedDust3R', ray_enc_depth=2, state_size=324, local_mem_size=256, state_pe='2d', state_dec_num_heads=16, depth_head=False, rgb_head=False, pose_conf_head=False, pose_head=False, msk_head=False, use_prompt=False, visual_prompt_number=10, use_adapter=False, reduction_dim=128, peft_layers=[], backbone='dinov2_vitl14', mhmr_img_res=None, use_focal=False, adapter_type='Adapter', head_mlp_ratio=4, fusion_mlp_ratio=4, detach=False, **croco_kwargs):
+         super().__init__()
+         self.output_mode = output_mode
+         self.head_type = head_type
+@@ -109,6 +119,11 @@
+         self.use_adapter = use_adapter
+         self.reduction_dim = reduction_dim
+         self.peft_layers = peft_layers
++        self.use_focal = use_focal
++        self.adapter_type = adapter_type
++        self.head_mlp_ratio = head_mlp_ratio
++        self.fusion_mlp_ratio = fusion_mlp_ratio
++        self.detach = detach
+ 
+ class LocalMemory(nn.Module):
+ 
+@@ -191,8 +206,23 @@
+             visual_prompt_number = self.config.visual_prompt_number
+             self.visual_prompt_tokens = nn.Parameter(torch.zeros(len(self.peft_layers), 1, visual_prompt_number, self.dec_embed_dim) * 0.02, requires_grad=True)
+         if getattr(self.config, 'use_adapter', False):
+-            from dust3r.modules import Adapter
+-            self.adapters = nn.ModuleList([Adapter(self.dec_embed_dim, self.config.reduction_dim) for i in range(len(self.peft_layers))])
++            self.adapter_type = getattr(self.config, 'adapter_type', 'Adapter')
++            self.adapter_region_scale = _env_float('ADAPTER3R_REGION_SCALE', 0.2, maximum=1.0)
++            self.adapter_fusion_factor = _env_float('ADAPTER3R_FUSION_FACTOR', 0.1, maximum=1.0)
++            self.adapter_residual_scale = _env_float('ADAPTER3R_RESIDUAL_SCALE', 0.5)
++            if self.adapter_type in ['Adapter']:
++                self.adapters = nn.ModuleList([Adapter(self.dec_embed_dim, self.config.reduction_dim) for i in range(len(self.peft_layers))])
++            elif self.adapter_type in ['DeformableAdapterHighRank']:
++                self.adapters = nn.ModuleList([DeformableAdapterHighRank(self.dec_embed_dim, self.config.reduction_dim, K_sample=4, region_scale=0.2, fusion_factor=0.1) for i in range(len(self.peft_layers))])
++            elif self.adapter_type in ['DeformableAdapterLowRank']:
++                self.adapters = nn.ModuleList([DeformableAdapterLowRank(self.dec_embed_dim, self.config.reduction_dim, K_sample=4, region_scale=0.2, fusion_factor=0.1) for i in range(len(self.peft_layers))])
++            elif self.adapter_type in ['Adapter3R']:
++                self.adapters = nn.ModuleList([Adapter3R(self.dec_embed_dim, self.config.reduction_dim, K_sample=4, region_scale=self.adapter_region_scale, fusion_factor=self.adapter_fusion_factor) for _ in range(len(self.peft_layers))])
++            else:
++                raise NotImplementedError('Unrecognized Adapter type.')
++        self.head_mlp_ratio = getattr(self.config, 'head_mlp_ratio', 4)
++        self.fusion_mlp_ratio = getattr(self.config, 'fusion_mlp_ratio', 4)
++        self.use_focal = config.use_focal
+         self._set_state_decoder(self.enc_embed_dim, self.dec_embed_dim, config.state_dec_num_heads, self.dec_depth, self.croco_args.get('mlp_ratio', None), self.croco_args.get('norm_layer', None), self.croco_args.get('norm_im2_in_dec', None))
+         self.set_downstream_head(config.output_mode, config.head_type, config.landscape_only, config.depth_mode, config.conf_mode, config.pose_mode, config.depth_head, config.rgb_head, config.pose_conf_head, config.pose_head, config.msk_head, **self.croco_args)
+         self.set_freeze(config.freeze)
+@@ -392,7 +422,7 @@
+                 full_out[i][~ray_mask_flat] += self.masked_ray_map_token * 0.0
+         return (shapes.chunk(len(views), dim=0), [out.chunk(len(views), dim=0) for out in full_out], full_pos.chunk(len(views), dim=0), [mhmr_out.chunk(len(views), dim=0) for mhmr_out in mhmr_full_out])
+ 
+-    def _decoder(self, f_state, pos_state, f_img, pos_img, f_pose, pos_pose, f_smpl, pos_smpl, use_ttt3r=False):
++    def _decoder(self, f_state, pos_state, f_img, pos_img, f_pose, pos_pose, f_smpl, pos_smpl, use_ttt3r=False, **kwargs):
+         final_output = [(f_state, f_img)]
+         assert f_state.shape[-1] == self.dec_embed_dim
+         f_img = self.decoder_embed(f_img)
+@@ -423,7 +453,17 @@
+                 max_human_number = f_smpl.shape[1]
+                 if max_human_number > 0:
+                     human_tokens = f_img[:, -max_human_number:]
+-                    human_tokens = human_tokens + self.adapters[self.peft_layers.index(layer_idx)](human_tokens)
++                    adapter = self.adapters[self.peft_layers.index(layer_idx)]
++                    if type(adapter) in [Adapter]:
++                        human_tokens = human_tokens + adapter(human_tokens)
++                    elif type(adapter) in [DeformableAdapterHighRank, DeformableAdapterLowRank, Adapter3R]:
++                        img_shape = (kwargs['true_shape'][0] * 16, kwargs['true_shape'][1] * 16)
++                        if kwargs.get('detach'):
++                            human_tokens = human_tokens + adapter(human_tokens, f_img[:, 1:-max_human_number].unsqueeze(1).detach(), img_shape, patch_size=16, sparse_pos=pos_smpl, pos_bound=kwargs['true_shape'], scale=self.adapter_residual_scale)
++                        else:
++                            human_tokens = human_tokens + adapter(human_tokens, f_img[:, 1:-max_human_number].unsqueeze(1), img_shape, patch_size=16, sparse_pos=pos_smpl, pos_bound=kwargs['true_shape'], scale=self.adapter_residual_scale)
++                    else:
++                        raise NotImplementedError()
+                     f_img = torch.cat([f_img[:, :-max_human_number], human_tokens], dim=1)
+             layer_idx += 1
+             final_output.append((f_state, f_img))
+@@ -442,8 +482,8 @@
+         state_feat = self.decoder_embed_state(state_feat)
+         return (state_feat, state_pos)
+ 
+-    def _recurrent_rollout(self, state_feat, state_pos, current_feat, current_pos, pose_feat, pose_pos, smpl_feat, smpl_pos, init_state_feat, img_mask=None, reset_mask=None, update=None, use_ttt3r=False):
+-        (new_state_feat, dec), cross_attn_states = self._decoder(state_feat, state_pos, current_feat, current_pos, pose_feat, pose_pos, smpl_feat, smpl_pos, use_ttt3r)
++    def _recurrent_rollout(self, state_feat, state_pos, current_feat, current_pos, pose_feat, pose_pos, smpl_feat, smpl_pos, init_state_feat, img_mask=None, reset_mask=None, update=None, use_ttt3r=False, **kwargs):
++        (new_state_feat, dec), cross_attn_states = self._decoder(state_feat, state_pos, current_feat, current_pos, pose_feat, pose_pos, smpl_feat, smpl_pos, use_ttt3r, **kwargs)
+         new_state_feat = new_state_feat[-1]
+         return (new_state_feat, dec, cross_attn_states)
+ 
+@@ -649,7 +689,7 @@
+             else:
+                 pose_feat_i = None
+                 pose_pos_i = None
+-            new_state_feat, dec, _ = self._recurrent_rollout(state_feat, state_pos, feat_i, pos_i, pose_feat_i, pose_pos_i, smpl_feat_i, smpl_pos_i, init_state_feat=None)
++            new_state_feat, dec, _ = self._recurrent_rollout(state_feat, state_pos, feat_i, pos_i, pose_feat_i, pose_pos_i, smpl_feat_i, smpl_pos_i, init_state_feat=None, true_shape=(shape[0][0] // self.croco_args['patch_size']).tolist(), detach=self.config.detach)
+             out_pose_feat_i = dec[-1][:, 0:1]
+             new_mem = self.pose_retriever.update_mem(mem, global_img_feat_i, out_pose_feat_i)
+             assert len(dec) == self.dec_depth + 1
+@@ -660,7 +700,11 @@
+             else:
+                 head_input = [dec[0].float(), dec[self.dec_depth * 2 // 4][:, 1:].float(), dec[self.dec_depth * 3 // 4][:, 1:].float(), dec[self.dec_depth].float()]
+                 smpl_token = None
+-            res = self._downstream_head(head_input, shape[i], pos=pos_i, n_humans=n_humans_i, smpl_token=smpl_token)
++            if self.use_focal:
++                focal = views[i]['camera_intrinsics'][:, 0, 0]
++                res = self._downstream_head(head_input, shape[i], pos=pos_i, n_humans=n_humans_i, smpl_token=smpl_token, focal=focal)
++            else:
++                res = self._downstream_head(head_input, shape[i], pos=pos_i, n_humans=n_humans_i, smpl_token=smpl_token)
+             if self.msk_head_flag:
+                 res['msk'] = msks[i]
+             ress.append({**res, 'smpl_scores': scores[i], 'smpl_loc': smpl_loc[i]})
+@@ -840,7 +884,7 @@
+             else:
+                 pose_feat_i = None
+                 pose_pos_i = None
+-            new_state_feat, dec, cross_attn_states = self._recurrent_rollout(state_feat, state_pos, feat_i, pos_i, pose_feat_i, pose_pos_i, smpl_feat_i, smpl_pos_i, init_state_feat, img_mask=view['img_mask'], reset_mask=view['reset'], update=view.get('update', None), use_ttt3r=use_ttt3r)
++            new_state_feat, dec, cross_attn_states = self._recurrent_rollout(state_feat, state_pos, feat_i, pos_i, pose_feat_i, pose_pos_i, smpl_feat_i, smpl_pos_i, init_state_feat, img_mask=view['img_mask'], reset_mask=view['reset'], update=view.get('update', None), use_ttt3r=use_ttt3r, true_shape=(shape[0] // self.croco_args['patch_size']).tolist(), detach=self.config.detach)
+             out_pose_feat_i = dec[-1][:, 0:1]
+             new_mem = self.pose_retriever.update_mem(mem, global_img_feat_i, out_pose_feat_i)
+             assert len(dec) == self.dec_depth + 1
+@@ -852,7 +896,11 @@
+                 head_input = [dec[0].float(), dec[self.dec_depth * 2 // 4][:, 1:].float(), dec[self.dec_depth * 3 // 4][:, 1:].float(), dec[self.dec_depth].float()]
+                 smpl_token = None
+                 smpl_token_cat = None
+-            res = self._downstream_head(head_input, shape, pos=pos_i, n_humans=n_humans_i, smpl_token=smpl_token_cat)
++            if self.use_focal:
++                focal = views[i]['camera_intrinsics'][:, 0, 0].cuda()
++                res = self._downstream_head(head_input, shape, pos=pos_i, n_humans=n_humans_i, smpl_token=smpl_token_cat, focal=focal)
++            else:
++                res = self._downstream_head(head_input, shape, pos=pos_i, n_humans=n_humans_i, smpl_token=smpl_token_cat)
+             num_miss_match0 = 0
+             if last_smpl_tk is not None and smpl_token is not None:
+                 cost_mat = -torch.cdist(last_smpl_tk, smpl_token, p=2)
+--- a/src/dust3r/modules.py
++++ b/src/dust3r/modules.py
+@@ -29,3 +29,178 @@
+         x = self.dropout(x)
+         x = self.up_projection(x) * scale
+         return x
++
++class ModLN(nn.Module):
++
++    def __init__(self, inner_dim: int, mod_dim: int, eps: float):
++        super().__init__()
++        self.norm = nn.LayerNorm(inner_dim, eps=eps)
++        self.mlp = nn.Sequential(nn.SiLU(), nn.Linear(mod_dim, inner_dim * 2))
++
++    def modulate(x, shift, scale):
++        x = x * (1 + scale.unsqueeze(1)) + shift.unsqueeze(1)
++        return x
++
++    def forward(self, x: torch.Tensor, mod: torch.Tensor) -> torch.Tensor:
++        shift, scale = self.mlp(mod).chunk(2, dim=-1)
++        x = self.modulate(self.norm(x), shift, scale)
++        return x
++
++class DeformableAdapterHighRank(nn.Module):
++
++    def __init__(self, embed_dim, reduction_dim, drop_rate_adapter=0, K_sample=4, region_scale=0.2, gating=False, fusion_factor=0.1, **kwargs):
++        super().__init__()
++        self.embed_dim = embed_dim
++        self.reduction_dim = reduction_dim
++        self.K_sample = K_sample
++        self.region_scale = region_scale
++        self.layer_norm = nn.LayerNorm(embed_dim)
++        self.down_projection = nn.Linear(embed_dim, reduction_dim)
++        self.activate = nn.GELU()
++        self.dropout = nn.Dropout(drop_rate_adapter)
++        self.up_projection = nn.Linear(reduction_dim, embed_dim)
++        self.gating = gating
++        if self.gating:
++            self.gate = nn.Parameter(torch.zeros(embed_dim))
++        else:
++            self.gate = 1
++        self.offset_head = nn.Linear(embed_dim, K_sample * 2)
++        self.weight_head = nn.Linear(embed_dim, K_sample)
++        self.reference_norm = nn.LayerNorm(embed_dim)
++        self.fusion_factor = fusion_factor
++        self.init_weights()
++
++    def init_weights(self):
++        nn.init.xavier_uniform_(self.down_projection.weight)
++        nn.init.zeros_(self.down_projection.bias)
++        nn.init.zeros_(self.up_projection.weight)
++        nn.init.zeros_(self.up_projection.bias)
++        if self.gating:
++            nn.init.zeros_(self.gate)
++        nn.init.xavier_uniform_(self.offset_head.weight)
++        nn.init.zeros_(self.offset_head.bias)
++        nn.init.xavier_uniform_(self.weight_head.weight)
++        nn.init.zeros_(self.weight_head.bias)
++
++    def create_grid(self, B, H, W, device):
++        ys = torch.linspace(-1.0, 1.0, H, device=device)
++        xs = torch.linspace(-1.0, 1.0, W, device=device)
++        grid_y, grid_x = torch.meshgrid(ys, xs, indexing='ij')
++        grid = torch.stack([grid_x, grid_y], dim=-1)
++        grid = grid.unsqueeze(0).repeat(B, 1, 1, 1)
++        return grid
++
++    def forward(self, x, x_refs, img_shape, patch_size, scale=0.5, **kwargs):
++        B, M, HW, C = x_refs.shape
++        img_H, img_W = img_shape
++        H, W = (img_H // patch_size, img_W // patch_size)
++        self_view_out = self.layer_norm(x)
++        self_view_out = self.down_projection(self_view_out)
++        self_view_out = self.activate(self_view_out)
++        self_view_out = self.dropout(self_view_out)
++        self_view_out = self.up_projection(self_view_out)
++        x_refs = self.reference_norm(x_refs)
++        x_refs = x_refs.view(B, M, H, W, C).permute(0, 1, 4, 2, 3)
++        offset = self.offset_head(x)
++        weight = self.weight_head(x)
++        offset = offset.view(B, H, W, self.K_sample, 2)
++        offset = torch.tanh(offset) * self.region_scale
++        weight = weight.view(B, H, W, self.K_sample)
++        weight = F.softmax(weight, dim=-1)
++        base_grid = self.create_grid(B, H, W, x.device)
++        base_grid = base_grid.unsqueeze(3)
++        sampling_location = base_grid + offset
++        sampling_location = sampling_location.clamp(-1.0, 1.0)
++        sampling_location = sampling_location.unsqueeze(1).expand(-1, M, -1, -1, -1, -1)
++        sampling_location = sampling_location.reshape(B * M * self.K_sample, H, W, 2)
++        x_refs = x_refs.unsqueeze(2).expand(-1, -1, self.K_sample, -1, -1, -1)
++        x_refs = x_refs.reshape(B * M * self.K_sample, C, H, W)
++        sampled_refs = F.grid_sample(x_refs, sampling_location, mode='bilinear', padding_mode='zeros', align_corners=False)
++        sampled_refs = sampled_refs.view(B, M, self.K_sample, C, H, W)
++        weight = weight.permute(0, 3, 1, 2)
++        weight = weight.unsqueeze(1).unsqueeze(3)
++        cross_view_out = (sampled_refs * weight).sum(2).sum(1)
++        cross_view_out = cross_view_out.permute(0, 2, 3, 1).reshape(B, HW, C)
++        output = ((1 - self.fusion_factor) * self_view_out + self.fusion_factor * cross_view_out) * scale
++        output = output * self.gate
++        return output
++
++class DeformableAdapterLowRank(nn.Module):
++
++    def __init__(self, embed_dim, reduction_dim, drop_rate_adapter=0, K_sample=4, region_scale=0.1, gating=False, fusion_factor=0.2, **kwargs):
++        super().__init__()
++        self.embed_dim = embed_dim
++        self.reduction_dim = reduction_dim
++        self.K_sample = K_sample
++        self.region_scale = region_scale
++        self.layer_norm = nn.LayerNorm(embed_dim)
++        self.down_projection = nn.Linear(embed_dim, reduction_dim)
++        self.activate = nn.GELU()
++        self.dropout = nn.Dropout(drop_rate_adapter)
++        self.up_projection = nn.Linear(reduction_dim, embed_dim)
++        self.gating = gating
++        if gating:
++            self.gate = nn.Parameter(torch.zeros(embed_dim))
++        else:
++            self.gate = 1
++        self.offset_head = nn.Linear(reduction_dim, K_sample * 2)
++        self.weight_head = nn.Linear(reduction_dim, K_sample)
++        self.reference_norm = nn.LayerNorm(embed_dim)
++        self.fusion_factor = fusion_factor
++        self.init_weights()
++
++    def init_weights(self):
++        nn.init.xavier_uniform_(self.down_projection.weight)
++        nn.init.zeros_(self.down_projection.bias)
++        nn.init.zeros_(self.up_projection.weight)
++        nn.init.zeros_(self.up_projection.bias)
++        if self.gating:
++            nn.init.zeros_(self.gate)
++        nn.init.xavier_uniform_(self.offset_head.weight)
++        nn.init.zeros_(self.offset_head.bias)
++        nn.init.xavier_uniform_(self.weight_head.weight)
++        nn.init.zeros_(self.weight_head.bias)
++
++    def create_grid(self, B, H, W, device):
++        ys = torch.linspace(-1.0, 1.0, H, device=device)
++        xs = torch.linspace(-1.0, 1.0, W, device=device)
++        grid_y, grid_x = torch.meshgrid(ys, xs, indexing='ij')
++        grid = torch.stack([grid_x, grid_y], dim=-1)
++        grid = grid.unsqueeze(0).repeat(B, 1, 1, 1)
++        return grid
++
++    def forward(self, x, x_refs, img_shape, patch_size, scale=0.5, **kwargs):
++        B, M, HW, C = x_refs.shape
++        img_H, img_W = img_shape
++        H, W = (img_H // patch_size, img_W // patch_size)
++        self_view_out = self.layer_norm(x)
++        self_view_out = self.down_projection(self_view_out)
++        self_view_out = self.activate(self_view_out)
++        self_view_out = self.dropout(self_view_out)
++        offset = self.offset_head(self_view_out)
++        weight = self.weight_head(self_view_out)
++        offset = offset.view(B, H, W, self.K_sample, 2)
++        offset = torch.tanh(offset) * self.region_scale
++        weight = weight.view(B, H, W, self.K_sample)
++        weight = F.softmax(weight, dim=-1)
++        base_grid = self.create_grid(B, H, W, x.device)
++        base_grid = base_grid.unsqueeze(3)
++        sampling_location = base_grid + offset
++        sampling_location = sampling_location.clamp(-1.0, 1.0)
++        sampling_location = sampling_location.unsqueeze(1).expand(-1, M, -1, -1, -1, -1)
++        sampling_location = sampling_location.reshape(B * M * self.K_sample, H, W, 2)
++        x_refs = self.reference_norm(x_refs)
++        x_refs = x_refs.view(B, M, H, W, C).permute(0, 1, 4, 2, 3)
++        x_refs = x_refs.unsqueeze(2).expand(-1, -1, self.K_sample, -1, -1, -1)
++        x_refs = x_refs.reshape(B * M * self.K_sample, C, H, W)
++        sampled_refs = F.grid_sample(x_refs, sampling_location, mode='bilinear', padding_mode='zeros', align_corners=False)
++        sampled_refs = sampled_refs.view(B, M, self.K_sample, C, H, W)
++        weight = weight.permute(0, 3, 1, 2)
++        weight = weight.unsqueeze(1).unsqueeze(3)
++        cross_view_out = (sampled_refs * weight).sum(2).sum(1)
++        cross_view_out = cross_view_out.permute(0, 2, 3, 1).reshape(B, HW, C)
++        self_view_out = self.up_projection(self_view_out)
++        output = ((1 - self.fusion_factor) * self_view_out + self.fusion_factor * cross_view_out) * scale
++        output = output * self.gate
++        return output
++from adapter3r import Adapter3R
+--- a/src/dust3r/heads/dpt_head.py
++++ b/src/dust3r/heads/dpt_head.py
+@@ -10,6 +10,16 @@
+ from torch.utils.checkpoint import checkpoint
+ from dust3r.smpl_model import SMPLDecoder, MEAN_PARAMS, regression_mlp
+ import numpy as np
++
++def fourier_embedding(x):
++    N_freqs = 5
++    freq_bands = 2 ** torch.linspace(0, N_freqs - 1, N_freqs)
++    funcs = [torch.sin, torch.cos]
++    out = [x]
++    for freq in freq_bands:
++        for func in funcs:
++            out += [func(freq * x)]
++    return torch.cat(out, -1)
+ 
+ class DPTOutputAdapter_fix(DPTOutputAdapter):
+ 
+@@ -190,7 +200,7 @@
+         self.mlp_offset = regression_mlp([backbone_dim, backbone_dim, 2])
+         if has_msk:
+             self.mlp_msk = SMPLDecoder(hidden_size=backbone_dim, target_dim=self.bb_patch_size ** 2, num_layers=2, mlp_ratio=1)
+-        self.mlp_fuse = SMPLDecoder(hidden_size=ed + backbone_dim, target_dim=dd, num_layers=2, mlp_ratio=4)
++        self.mlp_fuse = SMPLDecoder(hidden_size=ed + backbone_dim, target_dim=dd, num_layers=2, mlp_ratio=net.fusion_mlp_ratio)
+         self.joint_rep_type, self.joint_rep_dim = ('6d', 6)
+         self.nrot = 53
+         self.num_body_joints = self.nrot - 1
+@@ -199,10 +209,15 @@
+         self.input_is_mean_shape = True
+         self.num_betas = 10
+         assert self.num_betas in [10, 11]
+-        self.deccam = SMPLDecoder(hidden_size=in_dim, target_dim=3, num_layers=2, mlp_ratio=4)
+-        self.decpose = SMPLDecoder(hidden_size=in_dim + backbone_dim, target_dim=self.npose, num_layers=2, mlp_ratio=4)
+-        self.decshape = SMPLDecoder(hidden_size=in_dim + backbone_dim, target_dim=self.num_betas, num_layers=2, mlp_ratio=4)
+-        self.decexpression = SMPLDecoder(hidden_size=in_dim + backbone_dim, target_dim=10, num_layers=2, mlp_ratio=4)
++        self.use_focal = net.use_focal
++        if self.use_focal:
++            self.deccam = SMPLDecoder(hidden_size=in_dim + 128, target_dim=3, num_layers=2, mlp_ratio=net.head_mlp_ratio)
++            self.focal_feature_layer = nn.Linear(11, 128)
++        else:
++            self.deccam = SMPLDecoder(hidden_size=in_dim, target_dim=3, num_layers=2, mlp_ratio=net.head_mlp_ratio)
++        self.decpose = SMPLDecoder(hidden_size=in_dim + backbone_dim, target_dim=self.npose, num_layers=2, mlp_ratio=net.head_mlp_ratio)
++        self.decshape = SMPLDecoder(hidden_size=in_dim + backbone_dim, target_dim=self.num_betas, num_layers=2, mlp_ratio=net.head_mlp_ratio)
++        self.decexpression = SMPLDecoder(hidden_size=in_dim + backbone_dim, target_dim=10, num_layers=2, mlp_ratio=net.head_mlp_ratio)
+         self.set_smpl_init()
+ 
+     def set_smpl_init(self):
+@@ -243,9 +258,16 @@
+                 pose = self.pose_head(pose_token)
+                 if n_humans_i > 0:
+                     smpl_token = kwargs.get('smpl_token')
++                    if 'focal' in kwargs:
++                        focal = kwargs.get('focal')[:, None]
++                        focal_embeding = fourier_embedding(torch.log(focal)).unsqueeze(1).expand(-1, smpl_token.shape[1], -1)
++                        focal_embeding = self.focal_feature_layer(focal_embeding)
++                        cam_feature = torch.cat([smpl_token[..., :self.in_dim], focal_embeding], -1)
++                    else:
++                        cam_feature = smpl_token[..., :self.in_dim]
+                     pred_body_pose = self.decpose(smpl_token) + self.init_body_pose
+                     pred_betas = self.decshape(smpl_token) + self.init_betas
+-                    pred_cam = self.deccam(smpl_token[..., :self.in_dim])
++                    pred_cam = self.deccam(cam_feature)
+                     pred_expression = self.decexpression(smpl_token) + self.init_expression
+                     pred_smpl = [pred_body_pose, pred_betas, pred_cam, pred_expression]
+             token_cross = token.clone()
+--- a/src/dust3r/smpl_model.py
++++ b/src/dust3r/smpl_model.py
+@@ -23,6 +23,8 @@
+         self.bb_patch_size = model_args.get('bb_patch_size', 14)
+         self.smplx_neutral_11 = smplx.create(SMPLX_DIR, 'smplx', gender='neutral', use_pca=False, flat_hand_mean=True, num_betas=11).to(self.device)
+         self.smplx_neutral_10 = smplx.create(SMPLX_DIR, 'smplx', gender='neutral', use_pca=False, flat_hand_mean=True, num_betas=10).to(self.device)
++        self.smpl_neutral = smplx.create(SMPLX_DIR, 'smpl', gender='neutral').to(self.device)
++        self.smpl_neutral_joint_regressor = self.smpl_neutral.J_regressor[:24]
+         self.use_fake_K = eval_args.get('use_fake_K', False)
+         dataset = eval_args.get('dataset', None)
+         if dataset is not None:
+@@ -94,9 +96,17 @@
+         imgs = imgs.view(-1, *imgs.shape[2:])
+         K_mhmr = resize_camera_intrinsics(K, *imgs.shape[2:], self.mhmr_img_res)
+         imgs_mhmr = pad_image(imgs, self.mhmr_img_res)
+-        has_smplx_params = 1
+-        out = self.smplx_neutral_11(global_orient=smpl_dict['smplx_root_pose'][smpl_mask].reshape(-1, 3), body_pose=smpl_dict['smplx_body_pose'][smpl_mask].reshape(-1, 21 * 3), jaw_pose=smpl_dict['smplx_jaw_pose'][smpl_mask].reshape(-1, 3), leye_pose=smpl_dict['smplx_leye_pose'][smpl_mask].reshape(-1, 3), reye_pose=smpl_dict['smplx_reye_pose'][smpl_mask].reshape(-1, 3), left_hand_pose=smpl_dict['smplx_left_hand_pose'][smpl_mask].reshape(-1, 15 * 3), right_hand_pose=smpl_dict['smplx_right_hand_pose'][smpl_mask].reshape(-1, 15 * 3), betas=smpl_dict['smplx_shape'][smpl_mask].reshape(-1, 11), transl=smpl_dict['smplx_transl'][smpl_mask].reshape(-1, 3), expression=self.smplx_neutral_11.expression.repeat(nhv, 1))
+-        verts, jts = (out.vertices.reshape(nhv, -1, 3), out.joints.reshape(nhv, -1, 3))
++        if views[0]['dataset'][0].upper() in ['BEDLAM']:
++            has_smplx_params = 1
++            out = self.smplx_neutral_11(global_orient=smpl_dict['smplx_root_pose'][smpl_mask].reshape(-1, 3), body_pose=smpl_dict['smplx_body_pose'][smpl_mask].reshape(-1, 21 * 3), jaw_pose=smpl_dict['smplx_jaw_pose'][smpl_mask].reshape(-1, 3), leye_pose=smpl_dict['smplx_leye_pose'][smpl_mask].reshape(-1, 3), reye_pose=smpl_dict['smplx_reye_pose'][smpl_mask].reshape(-1, 3), left_hand_pose=smpl_dict['smplx_left_hand_pose'][smpl_mask].reshape(-1, 15 * 3), right_hand_pose=smpl_dict['smplx_right_hand_pose'][smpl_mask].reshape(-1, 15 * 3), betas=smpl_dict['smplx_shape'][smpl_mask].reshape(-1, 11), transl=smpl_dict['smplx_transl'][smpl_mask].reshape(-1, 3), expression=self.smplx_neutral_11.expression.repeat(nhv, 1))
++            verts, jts = (out.vertices.reshape(nhv, -1, 3), out.joints.reshape(nhv, -1, 3))
++        elif views[0]['dataset'][0].upper() in ['AGORA']:
++            has_smplx_params = 2
++            out = self.smpl_neutral(global_orient=smpl_dict['smpl_global_orient'][smpl_mask].reshape(-1, 3), body_pose=smpl_dict['smpl_body_pose'][smpl_mask].reshape(-1, 23 * 3), betas=smpl_dict['smpl_betas'][smpl_mask].reshape(-1, 10), transl=smpl_dict['smpl_transl'][smpl_mask].reshape(-1, 3))
++            verts = out.vertices.reshape(nhv, -1, 3)
++            jts = self.smpl_neutral_joint_regressor @ verts
++        else:
++            has_smplx_params = 0
+         j2d = perspective_projection(jts, K[idx_h[0]])
+         v2d = perspective_projection(verts, K[idx_h[0]])
+         root_joint_idx = JOINT_NAMES.index(self.person_center)
+@@ -106,10 +116,12 @@
+         target['smpl_j3d'] = jts
+         target['smpl_j2d'] = j2d
+         target['smpl_v2d'] = v2d
+-        if has_smplx_params:
++        if has_smplx_params == 1:
+             target['smpl_rotvec'] = torch.cat([smpl_dict['smplx_root_pose'], smpl_dict['smplx_body_pose'], smpl_dict['smplx_left_hand_pose'], smpl_dict['smplx_right_hand_pose'], smpl_dict['smplx_jaw_pose']], 2)[smpl_mask]
+             target['smpl_rotmat'] = roma.rotvec_to_rotmat(target['smpl_rotvec'])
+             target['smpl_shape'] = smpl_dict['smplx_shape'][smpl_mask]
++        elif has_smplx_params == 2:
++            target['smpl_shape'] = smpl_dict['smpl_betas'][smpl_mask]
+         true_shapes = torch.stack([view['true_shape'] for view in views], dim=0)
+         if len(torch.unique(true_shapes, dim=0)) != 1:
+             raise NotImplementedError
+--- a/src/dust3r/utils/smpl_layer.py
++++ b/src/dust3r/utils/smpl_layer.py
+@@ -4,8 +4,10 @@
+ import torch
+ from dust3r.utils.geometry import inverse_perspective_projection, perspective_projection
+ import roma
+-from dust3r.smpl_model import SMPLX_DIR
++from dust3r.smpl_model import SMPLX_DIR, SMPLX2SMPL
+ from smplx.joint_names import JOINT_NAMES
++import numpy as np
++import pickle
+ 
+ class SMPL_Layer(nn.Module):
+ 
+@@ -21,8 +23,11 @@
+         self.person_center_idx = None
+         if self.person_center is not None:
+             self.person_center_idx = self.joint_names.index(self.person_center)
++        with open(SMPLX2SMPL, 'rb') as f:
++            self.smplx2smpl = torch.from_numpy(pickle.load(f)['matrix'].astype(np.float32)).to('cuda')
++        self.j_regressor_smpl = smplx.create(SMPLX_DIR, 'smpl', gender='neutral').J_regressor[:24].to('cuda')
+ 
+-    def forward(self, pose, shape, transl, loc, dist, K, expression=None, K_to_proj=None):
++    def forward(self, pose, shape, transl, loc, dist, K, expression=None, K_to_proj=None, smplx_to_smpl=False):
+         if loc is not None and dist is not None:
+             assert pose.shape[0] == shape.shape[0] == loc.shape[0] == dist.shape[0]
+             assert len(loc.shape) == 2 and list(loc.shape[1:]) == [2]
+@@ -73,6 +78,9 @@
+             j3d = j3d - person_center
+         j3d_cam = j3d + transl_up.unsqueeze(1)
+         verts_cam = verts + transl_up.unsqueeze(1)
++        if smplx_to_smpl:
++            verts_cam = self.smplx2smpl @ verts_cam
++            j3d_cam = self.j_regressor_smpl @ verts_cam
+         if K_to_proj is None:
+             K_to_proj = K
+         j2d = perspective_projection(j3d_cam, K_to_proj)
+--- a/src/dust3r/utils/render.py
++++ b/src/dust3r/utils/render.py
+@@ -69,6 +69,8 @@
+ def get_render_smpl(gts, preds, smpl_model, loss_details, has_msk=False):
+     with torch.no_grad():
+         smpl_faces = {'neutral': {10: smpl_model.smplx_neutral_10.faces, 11: smpl_model.smplx_neutral_11.faces}}
++        if gts[0]['smpl_v3d'].shape[2] <= 6890:
++            smpl_faces = {'neutral': {10: smpl_model.smpl_neutral.faces}}
+         gt_hms_list, pr_hms_list, gt_smpls_list, pr_smpls_list = ([], [], [], [])
+         gt_msks_list, pr_msks_list = ([], [])
+         for i, (gt, pred) in enumerate(zip(gts, preds)):
+--- a/src/train.py
++++ b/src/train.py
+@@ -1,7 +1,7 @@
+ import os
+ os.environ['OMP_NUM_THREADS'] = '12'
+ os.environ['MKL_NUM_THREADS'] = '12'
+-os.environ['CUDA_VISIBLE_DEVICES'] = '1'
++os.environ.setdefault('CUDA_VISIBLE_DEVICES', '3')
+ os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
+ import argparse
+ import datetime
+@@ -152,6 +152,7 @@
+             merge_state_dict.update(strip_module_mhmr(ckpt_mhmr['model_state_dict']))
+             del ckpt_mhmr
+         ckpt_load_information = model.load_state_dict(merge_state_dict, strict=False)
++        printer.info(f'Model state loading:{ckpt_load_information}\n')
+         printer.info('Missing keys:\n' + '\n'.join(ckpt_load_information.missing_keys))
+         printer.info('Unexpected keys:\n' + '\n'.join(ckpt_load_information.unexpected_keys))
+     param_groups = misc.get_parameter_groups(model, args.weight_decay)
+@@ -523,7 +524,7 @@
+         ret_dict[f'imgs_{i}'] = out
+     return ret_dict
+ 
+-@hydra.main(version_base=None, config_path='../config', config_name='train_human3r_adapter-agora.yaml')
++@hydra.main(version_base=None, config_path='../config', config_name='train_human3r_adapter.yaml')
+ def run(cfg: OmegaConf):
+     OmegaConf.resolve(cfg)
+     train(cfg)
+--- a/src/dust3r/losses.py
++++ b/src/dust3r/losses.py
+@@ -207,7 +207,7 @@
+         self.alpha_bce = 10.0 * scale
+         self.alpha_rotmat = 100.0 * scale
+         self.alpha_shape = 10.0 * scale
+-        self.alpha_transl = 300.0 * scale
++        self.alpha_transl = 100.0 * scale
+         self.alpha_j3d = 100.0 * scale
+         self.alpha_v3d = 100.0 * scale
+         self.alpha_j2d = 1.0 * scale
+@@ -249,11 +249,14 @@
+         bce = sum(ls) / len(ls)
+         return (bce, details)
+ 
+-    def smpl_param_loss(self, gts, preds, masks, k, ret_pred=False):
++    def smpl_param_loss(self, gts, preds, masks, k, ret_pred=False, focals=None):
+         if isinstance(gts[0], dict):
+             gts = [gt[k] for gt in gts]
+         if isinstance(preds[0], dict):
+             preds = [pred[k] for pred in preds]
++        if focals:
++            gts = [gts[i] / focals[i] * 400 for i in range(len(gts))]
++            preds = [preds[i] / focals[i] * 400 for i in range(len(preds))]
+         ls = [self.criterion(p[m], g[m]) for p, g, m in zip(preds, gts, masks)]
+         details = {}
+         self_name = self.get_name()
+@@ -329,7 +332,12 @@
+         pred_transl = [pred.pop('smpl_transl') for pred in preds]
+         pred_transl = stack_view(pred_transl, 'smpl_transl')
+         pred_expression = stack_view(preds, 'smpl_expression')
+-        smpl_out = self.smpl_layer[f'neutral_{pred_shape.shape[-1]}'](pred_rotvec, pred_shape[smpl_mask], pred_transl[smpl_mask], None, None, K=K[idx_h[0]], expression=pred_expression[smpl_mask])
++        if gts[0]['dataset'][0] in ['BEDLAM']:
++            smpl_out = self.smpl_layer[f'neutral_{pred_shape.shape[-1]}'](pred_rotvec, pred_shape[smpl_mask], pred_transl[smpl_mask], None, None, K=K[idx_h[0]], expression=pred_expression[smpl_mask])
++        elif gts[0]['dataset'][0] in ['AGORA']:
++            smpl_out = self.smpl_layer[f'neutral_{pred_shape.shape[-1]}'](pred_rotvec, pred_shape[smpl_mask], pred_transl[smpl_mask], None, None, K=K[idx_h[0]], expression=pred_expression[smpl_mask], smplx_to_smpl=True)
++        else:
++            raise NotImplementedError()
+         pred_smpl = {}
+         batch_size = img_mask_list[0].shape[0]
+         num_view = len(gts)
+@@ -338,8 +346,19 @@
+             full_out = torch.zeros(num_view * batch_size, max_humans, *v.shape[1:], device=v.device, dtype=v.dtype)
+             full_out[smpl_mask] = v
+             pred_smpl[k] = full_out.chunk(num_view, dim=0)
+-        rotmat_loss, rotmat_details = self.smpl_param_loss(gts, preds, masks_list, 'smpl_rotmat')
+-        transl_loss, transl_details = self.smpl_param_loss(gts, pred_smpl['smpl_transl'], masks_list, 'smpl_transl')
++        if gts[0]['dataset'][0] in ['BEDLAM']:
++            rotmat_loss, rotmat_details = self.smpl_param_loss(gts, preds, masks_list, 'smpl_rotmat')
++        elif gts[0]['dataset'][0] in ['AGORA']:
++            rotmat_loss, rotmat_details = (0, {})
++        else:
++            raise NotImplementedError()
++        if gts[0]['dataset'][0] in ['BEDLAM']:
++            focals = [gt['camera_intrinsics'][:, 0:1, 0:1] for gt in gts]
++            transl_loss, transl_details = self.smpl_param_loss(gts, pred_smpl['smpl_transl'], masks_list, 'smpl_transl', focals=focals)
++        elif gts[0]['dataset'][0] in ['AGORA']:
++            transl_loss, transl_details = (0, {})
++        else:
++            raise NotImplementedError()
+         shape_dim = min([gts[0]['smpl_shape'].shape[-1], preds[0]['smpl_shape'].shape[-1]])
+         gt_shape = [gt['smpl_shape'][..., :shape_dim] for gt in gts]
+         pred_shape = [pred['smpl_shape'][..., :shape_dim] for pred in preds]
+@@ -348,14 +367,20 @@
+         pred_transl_pelvis = pred_smpl['smpl_transl_pelvis']
+         j3d_loss, j3d_details = self.point3d_loss(gts, pred_smpl['smpl_j3d'], gt_transl_pelvis, pred_transl_pelvis, masks_list, 'smpl_j3d')
+         v3d_loss, v3d_details = self.point3d_loss(gts, pred_smpl['smpl_v3d'], gt_transl_pelvis, pred_transl_pelvis, masks_list, 'smpl_v3d', ret_pred=True)
+-        cj3d_loss, cj3d_details = self.point3d_loss(gts, pred_smpl['smpl_j3d'], None, None, masks_list, 'smpl_j3d')
+-        cv3d_loss, cv3d_details = self.point3d_loss(gts, pred_smpl['smpl_v3d'], None, None, masks_list, 'smpl_v3d')
++        if gts[0]['dataset'][0] in ['BEDLAM']:
++            cj3d_loss, cj3d_details = self.point3d_loss(gts, pred_smpl['smpl_j3d'], None, None, masks_list, 'smpl_j3d')
++            cv3d_loss, cv3d_details = self.point3d_loss(gts, pred_smpl['smpl_v3d'], None, None, masks_list, 'smpl_v3d')
++        elif gts[0]['dataset'][0] in ['AGORA']:
++            cj3d_loss, cj3d_details = (0, {})
++            cv3d_loss, cv3d_details = (0, {})
++        else:
++            raise NotImplementedError()
+         total_loss = self.alpha_bce * score_loss + self.alpha_rotmat * rotmat_loss + self.alpha_shape * shape_loss + self.alpha_transl * transl_loss + self.alpha_j3d * j3d_loss + self.alpha_v3d * v3d_loss + self.alpha_j3d * cj3d_loss + self.alpha_v3d * cv3d_loss
+         details = {**score_details, **rotmat_details, **transl_details, **shape_details, **j3d_details, **v3d_details, **cj3d_details, **cv3d_details}
+         if has_msk:
+             total_loss += self.alpha_msk * msk_loss
+             details.update(msk_details)
+-        if cv3d_loss < 1.0:
++        if cv3d_loss < 1.0 and gts[0]['dataset'][0] in ['BEDLAM']:
+             j2d_loss, j2d_details = self.point2d_loss(gts, pred_smpl['smpl_j2d'], masks_list, 'smpl_j2d')
+             v2d_loss, v2d_details = self.point2d_loss(gts, pred_smpl['smpl_v2d'], masks_list, 'smpl_v2d')
+             total_loss += self.alpha_j2d * j2d_loss + self.alpha_v2d * v2d_loss
+--- a/src/dust3r/datasets/bedlam.py
++++ b/src/dust3r/datasets/bedlam.py
+@@ -96,7 +96,7 @@
+                 mask_image = None
+             depthmap = np.load(osp.join(depth_dir, basename + '.npy'))
+             depthmap[~np.isfinite(depthmap)] = 0
+-            depthmap[depthmap > 200.0] = 0.0
++            depthmap[depthmap > 15.0] = 0.0
+             cam = np.load(osp.join(cam_dir, basename + '.npz'))
+             camera_pose = cam['pose']
+             intrinsics = cam['intrinsics']
+--- /dev/null
++++ b/config/train_human3r_adapter-bedlam.yaml
+@@ -0,0 +1,223 @@
++model: ARCroco3DStereo(ARCroco3DStereoConfig(freeze='encoder_and_decoder_and_head', 
++  state_size=768, state_pe='2d', pos_embed='RoPE100',
++  rgb_head=True, pose_head=True, msk_head=True, patch_embed_cls='ManyAR_PatchEmbed', img_size=(512,
++  512), head_type='dpt', output_mode='pts3d+pose+smpl', depth_mode=('exp', -inf, inf),
++  conf_mode=('exp', 1, inf), pose_mode=('exp', -inf, inf), enc_embed_dim=1024, enc_depth=24,
++  enc_num_heads=16, dec_embed_dim=768, dec_depth=12, dec_num_heads=12, landscape_only=False,
++  backbone='dinov2_vitl14', mhmr_img_res=896, 
++  use_adapter=True, reduction_dim=32, peft_layers=[8,9,10,11]))
++pretrained: checkpoints/human3r-adapter32-smpl.only-layer8t11-scratch-0translateloss-rela.vj.detach/2026.04.10-02:00:23/checkpoint-final.pth
++pretrained_mhmr: False # multiHMR_672_S/multiHMR_672_B/multiHMR_672_L/multiHMR_896_L
++load_only_encoder: False
++long_context: False
++fixed_length: True
++resume: null
++benchmark: True
++num_views : 4
++num_test_views : 4
++n_corres_train: 0
++n_corres_test: 0
++
++
++train_criterion: ConfLoss(Regr3DPoseBatchList(L21, norm_mode='?avg_dis'), alpha=0.2) + RGBLoss(MSE) + SMPLLoss(L1)
++test_criterion: Regr3DPose(L21, norm_mode='?avg_dis', gt_scale=True, sky_loss_value=0) + Regr3DPose_ScaleInv(L21, norm_mode='?avg_dis', gt_scale=True, sky_loss_value=0) + RGBLoss(L21) + SMPLLoss(L1)
++
++resolution:
++- (512
++- 384)
++- (512
++- 336)
++- (512
++- 288)
++- (512
++- 256)
++- (512
++- 208)
++- (512
++- 144)
++- (384
++- 512)
++- (336
++- 512)
++- (288
++- 512)
++- (256
++- 512)
++dataset1: Co3d_Multi(allow_repeat=True, split='train', ROOT='../..external/assets',
++  aug_crop=16, resolution=[(512, 384), (512, 336), (512, 288), (512, 256), (512, 208),
++  (512, 144), (384, 512), (336, 512), (288, 512), (256, 512)], transform=SeqColorJitter,
++  num_views=${num_views}, n_corres=${n_corres_train})
++dataset2: WildRGBD_Multi(allow_repeat=True, split='train', ROOT="../..external/assets",
++  aug_crop=16, resolution=[(512, 384), (512, 336), (512, 288), (512, 256), (512, 208),
++  (512, 144), (384, 512), (336, 512), (288, 512), (256, 512)], transform=SeqColorJitter,
++  num_views=${num_views}, n_corres=${n_corres_train})
++dataset3: ARKitScenes_Multi(allow_repeat=True, split='train', ROOT='../..external/assets',
++  aug_crop=16, resolution=[(512, 384), (512, 336), (512, 288), (512, 256), (512, 208),
++  (512, 144), (384, 512), (336, 512), (288, 512), (256, 512)], transform=SeqColorJitter,
++  num_views=${num_views}, n_corres=${n_corres_train})
++dataset4: ARKitScenesHighRes_Multi(allow_repeat=True, split='train', ROOT="../..external/assets",
++  aug_crop=16, resolution=[(512, 384), (512, 336), (512, 288), (512, 256), (512, 208),
++  (512, 144), (384, 512), (336, 512), (288, 512), (256, 512)], transform=SeqColorJitter,
++  num_views=${num_views}, n_corres=${n_corres_train})
++dataset5: ScanNetpp_Multi(allow_repeat=True, split='train', ROOT="../..external/assets",
++  aug_crop=16, resolution=[(512, 384), (512, 336), (512, 288), (512, 256), (512, 208),
++  (512, 144), (384, 512), (336, 512), (288, 512), (256, 512)], transform=SeqColorJitter,
++  num_views=${num_views}, n_corres=${n_corres_train})
++dataset6: ScanNet_Multi(allow_repeat=True, split='train', ROOT="../..external/assets",
++  aug_crop=16, resolution=[(512, 384), (512, 336), (512, 288), (512, 256), (512, 208),
++  (512, 144), (384, 512), (336, 512), (288, 512), (256, 512)], transform=SeqColorJitter,
++  num_views=${num_views}, n_corres=${n_corres_train})
++dataset7: HyperSim_Multi(allow_repeat=True, split='train', ROOT="../..external/assets",
++  aug_crop=16, resolution=[(512, 384), (512, 336), (512, 288), (512, 256), (512, 208),
++  (512, 144), (384, 512), (336, 512), (288, 512), (256, 512)], transform=SeqColorJitter,
++  num_views=${num_views}, n_corres=${n_corres_train})
++dataset8: BlendedMVS_Multi(allow_repeat=True, split='train', ROOT="../..external/assets",
++  aug_crop=16, resolution=[(512, 384), (512, 336), (512, 288), (512, 256), (512, 208),
++  (512, 144), (384, 512), (336, 512), (288, 512), (256, 512)], transform=SeqColorJitter,
++  num_views=${num_views}, n_corres=${n_corres_train})
++dataset9: MegaDepth_Multi(allow_repeat=True, split="train", ROOT="../..external/assets",
++  aug_crop=16, resolution=[(512, 384), (512, 336), (512, 288), (512, 256), (512, 208),
++  (512, 144), (384, 512), (336, 512), (288, 512), (256, 512)], transform=SeqColorJitter,
++  num_views=${num_views}, n_corres=${n_corres_train})
++dataset10: MapFree_Multi(allow_repeat=True, split=None, ROOT="../..external/assets",
++  aug_crop=16, resolution=[(512, 384), (512, 336), (512, 288), (512, 256), (512, 208),
++  (512, 144), (384, 512), (336, 512), (288, 512), (256, 512)], transform=SeqColorJitter,
++  num_views=${num_views}, n_corres=${n_corres_train})
++dataset11: Waymo_Multi(allow_repeat=True, split=None, ROOT="../..external/assets",
++  aug_crop=16, resolution=[(512, 384), (512, 336), (512, 288), (512, 256), (512, 208),
++  (512, 144), (384, 512), (336, 512), (288, 512), (256, 512)], transform=SeqColorJitter,
++  num_views=${num_views}, n_corres=${n_corres_train})
++dataset12: VirtualKITTI2_Multi(allow_repeat=True, split=None, ROOT="../..external/assets",
++  aug_crop=16, resolution=[(512, 384), (512, 336), (512, 288), (512, 256), (512, 208),
++  (512, 144), (384, 512), (336, 512), (288, 512), (256, 512)], transform=SeqColorJitter,
++  num_views=${num_views}, n_corres=${n_corres_train})
++dataset13: UnReal4K_Multi(allow_repeat=True, split=None, ROOT="../..external/assets",
++  aug_crop=16, resolution=[(512, 384), (512, 336), (512, 288), (512, 256), (512, 208),
++  (512, 144), (384, 512), (336, 512), (288, 512), (256, 512)], transform=SeqColorJitter,
++  num_views=${num_views}, n_corres=${n_corres_train})
++dataset14: TartanAir_Multi(allow_repeat=True, split=None, ROOT="../..external/assets",
++  aug_crop=16, resolution=[(512, 384), (512, 336), (512, 288), (512, 256), (512, 208),
++  (512, 144), (384, 512), (336, 512), (288, 512), (256, 512)], transform=SeqColorJitter,
++  num_views=${num_views}, n_corres=${n_corres_train})
++dataset15: DL3DV_Multi(allow_repeat=True, split='train', ROOT="../..external/assets",
++  aug_crop=16, resolution=[(512, 384), (512, 336), (512, 288), (512, 256), (512, 208),
++  (512, 144), (384, 512), (336, 512), (288, 512), (256, 512)], transform=SeqColorJitter,
++  num_views=${num_views}, n_corres=${n_corres_train})
++dataset16: Cop3D_Multi(allow_repeat=True, split='train', ROOT="../..external/assets",
++  aug_crop=16, resolution=[(512, 384), (512, 336), (512, 288), (512, 256), (512, 208),
++  (512, 144), (384, 512), (336, 512), (288, 512), (256, 512)], transform=SeqColorJitter,
++  num_views=${num_views}, n_corres=${n_corres_train})
++dataset17: MVImgNet_Multi(allow_repeat=True, split='train', ROOT="../..external/assets",
++  aug_crop=16, resolution=[(512, 384), (512, 336), (512, 288), (512, 256), (512, 208),
++  (512, 144), (384, 512), (336, 512), (288, 512), (256, 512)], transform=SeqColorJitter,
++  num_views=${num_views}, n_corres=${n_corres_train})
++dataset18: RE10K_Multi(allow_repeat=True, split=None, ROOT="../..external/assets",
++  aug_crop=16, resolution=[(512, 384), (512, 336), (512, 288), (512, 256), (512, 208),
++  (512, 144), (384, 512), (336, 512), (288, 512), (256, 512)], transform=SeqColorJitter,
++  num_views=${num_views}, n_corres=${n_corres_train})
++dataset19: OmniObject3D_Multi(allow_repeat=True, split=None, ROOT="../..external/assets",
++  aug_crop=16, resolution=[(512, 384), (512, 336), (512, 288), (512, 256), (512, 208),
++  (512, 144), (384, 512), (336, 512), (288, 512), (256, 512)], transform=SeqColorJitter,
++  num_views=${num_views}, n_corres=${n_corres_train})
++dataset20: ThreeDKenBurns(allow_repeat=True, split=None, ROOT="../..external/assets",
++  aug_crop=16, resolution=[(512, 384), (512, 336), (512, 288), (512, 256), (512, 208),
++  (512, 144), (384, 512), (336, 512), (288, 512), (256, 512)], transform=SeqColorJitter,
++  num_views=${num_views}, n_corres=${n_corres_train})
++dataset21: IRS(allow_repeat=True, split=None, ROOT="../..external/assets",
++  aug_crop=16, resolution=[(512, 384), (512, 336), (512, 288), (512, 256), (512, 208),
++  (512, 144), (384, 512), (336, 512), (288, 512), (256, 512)], transform=SeqColorJitter,
++  num_views=${num_views}, n_corres=${n_corres_train})
++dataset22: SynScapes(allow_repeat=True, split=None, ROOT="../..external/assets",
++  aug_crop=16, resolution=[(512, 384), (512, 336), (512, 288), (512, 256), (512, 208),
++  (512, 144), (384, 512), (336, 512), (288, 512), (256, 512)], transform=SeqColorJitter,
++  num_views=${num_views}, n_corres=${n_corres_train})
++dataset23: UrbanSyn(allow_repeat=True, split=None, ROOT="../..external/assets",
++  aug_crop=16, resolution=[(512, 384), (512, 336), (512, 288), (512, 256), (512, 208),
++  (512, 144), (384, 512), (336, 512), (288, 512), (256, 512)], transform=SeqColorJitter,
++  num_views=${num_views}, n_corres=${n_corres_train})
++dataset24: EDEN_Multi(allow_repeat=True, split='train', ROOT="../..external/assets",
++  aug_crop=16, resolution=[(512, 384), (512, 336), (512, 288), (512, 256), (512, 208),
++  (512, 144), (384, 512), (336, 512), (288, 512), (256, 512)], transform=SeqColorJitter,
++  num_views=${num_views}, n_corres=${n_corres_train})
++dataset25: SmartPortraits_Multi(allow_repeat=True, split='train', ROOT="../..external/assets",
++  aug_crop=16, resolution=[(512, 384), (512, 336), (512, 288), (512, 256), (512, 208),
++  (512, 144), (384, 512), (336, 512), (288, 512), (256, 512)], transform=SeqColorJitter,
++  num_views=${num_views}, n_corres=${n_corres_train})
++dataset26: DynamicReplica(allow_repeat=True, split='train', ROOT="../..external/assets",
++  aug_crop=16, resolution=[(512, 384), (512, 336), (512, 288), (512, 256), (512, 208),
++  (512, 144), (384, 512), (336, 512), (288, 512), (256, 512)], transform=SeqColorJitter,
++  num_views=${num_views}, n_corres=${n_corres_train})
++dataset27: Spring(allow_repeat=True, split=None, ROOT="../..external/assets",
++  aug_crop=16, resolution=[(512, 384), (512, 336), (512, 288), (512, 256), (512, 208),
++  (512, 144), (384, 512), (336, 512), (288, 512), (256, 512)], transform=SeqColorJitter,
++  num_views=${num_views}, n_corres=${n_corres_train})
++dataset28: BEDLAM_Multi(allow_repeat=True, split='train', ROOT="data/bedlam/processed_bedlam",
++  aug_crop=16, resolution=[(512, 384), (512, 336), (512, 288), (512, 256), (512, 208),
++  (512, 144), (384, 512), (336, 512), (288, 512), (256, 512)], transform=SeqColorJitter,
++  num_views=${num_views}, n_corres=${n_corres_train})
++dataset29: MVS_Synth_Multi(allow_repeat=True, split='train', ROOT="../..external/assets",
++  aug_crop=16, resolution=[(512, 384), (512, 336), (512, 288), (512, 256), (512, 208),
++  (512, 144), (384, 512), (336, 512), (288, 512), (256, 512)], transform=SeqColorJitter,
++  num_views=${num_views}, n_corres=${n_corres_train})
++dataset30: PointOdyssey_Multi(allow_repeat=True, split='train', ROOT="../..external/assets",
++  aug_crop=16, resolution=[(512, 384), (512, 336), (512, 288), (512, 256), (512, 208),
++  (512, 144), (384, 512), (336, 512), (288, 512), (256, 512)], transform=SeqColorJitter,
++  num_views=${num_views}, n_corres=${n_corres_train})
++dataset31: UASOL_Multi(allow_repeat=True, split='train', ROOT="../..external/assets",
++  aug_crop=16, resolution=[(512, 384), (512, 336), (512, 288), (512, 256), (512, 208),
++  (512, 144), (384, 512), (336, 512), (288, 512), (256, 512)], transform=SeqColorJitter,
++  num_views=${num_views}, n_corres=${n_corres_train})
++dataset32: MP3D_Multi(allow_repeat=True, split=None, ROOT="../..external/assets",
++  aug_crop=16, resolution=[(512, 384), (512, 336), (512, 288), (512, 256), (512, 208),
++  (512, 144), (384, 512), (336, 512), (288, 512), (256, 512)], transform=SeqColorJitter,
++  num_views=${num_views}, n_corres=${n_corres_train})
++dataset33: HOI4D_Multi(allow_repeat=True, split=None, ROOT="../..external/assets",
++  aug_crop=16, resolution=[(512, 384), (512, 336), (512, 288), (512, 256), (512, 208),
++  (512, 144), (384, 512), (336, 512), (288, 512), (256, 512)], transform=SeqColorJitter,
++  num_views=${num_views}, n_corres=${n_corres_train})
++dataset34: AGORA_Multi(allow_repeat=True, split='train', ROOT="data/AGORA",
++  aug_crop=16, resolution=[(512, 384), (512, 336), (512, 288), (512, 256), (512, 208),
++  (512, 144), (384, 512), (336, 512), (288, 512), (256, 512)], transform=SeqColorJitter,
++  num_views=1, n_corres=0)
++
++train_dataset: 4000 @ ${dataset28}
++test_dataset: 1000 @ BEDLAM_Multi(split='test', ROOT='data/bedlam/processed_bedlam', resolution=(512, 288), num_views=4, seed=42, n_corres=0)
++
++seed: 0
++batch_size: 8
++accum_iter: 1
++gradient_checkpointing: true
++epochs: 40
++start_epoch: 0
++weight_decay: 0.05
++lr: 1.0e-04
++min_lr: 1.0e-06
++warmup_epochs: 5
++amp: 1
++
++num_workers: 12
++world_size: 1
++local-rank: -1
++dist_url: 'env://'
++rank: 0
++gpu: 0
++distributed: False
++dist_backend: 'nccl'
++
++eval_freq: 1
++save_freq: 1
++keep_freq: 5
++print_freq: 100
++print_img_freq: 300
++num_imgs_vis: 4
++save_dir: 'checkpoints'
++exp_name: 'human3r-adapter32-smpl.only-layer8t11-scratch-0translateloss-rela.vj.detach-continue'
++task: 'cut3r'
++logdir: ./${save_dir}/${exp_name}/logs
++output_dir: ./${save_dir}/${exp_name}/
++save_code: True
++
++hydra:
++  verbose: True
++  run:
++    dir: ./${save_dir}/${exp_name}
+--- a/eval/global_human/launch.py
++++ b/eval/global_human/launch.py
+@@ -1,7 +1,7 @@
+ import os
+ os.environ['OMP_NUM_THREADS'] = '8'
+ os.environ['MKL_NUM_THREADS'] = '8'
+-os.environ['CUDA_VISIBLE_DEVICES'] = '6'
++os.environ['CUDA_VISIBLE_DEVICES'] = '3'
+ os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
+ import sys
+ import gc
+@@ -10,6 +10,7 @@
+ import numpy as np
+ import torch
+ import argparse
++import shutil
+ from copy import deepcopy
+ from eval.global_human.metadata import dataset_metadata
+ from eval.global_human.utils import *
+@@ -22,11 +23,11 @@
+ 
+ def get_args_parser():
+     parser = argparse.ArgumentParser()
+-    parser.add_argument('--weights', type=str, help='path to the model weights', default='human3r_896L.pth')
++    parser.add_argument('--weights', type=str, help='path to the model weights', default='checkpoints/3RAdapter128-sm.o-l8t11-1.tran.1.shap-128.f-nm.f-h2.f2.r-r.img-depth15/2026.05.05-15:27:47/checkpoint-final.pth')
+     parser.add_argument('--device', type=str, default='cuda', help='pytorch device')
+     parser.add_argument('--output_dir', type=str, default='external/assets', help='value for outdir')
+     parser.add_argument('--no_crop', type=bool, default=True, help='whether to crop input data')
+-    parser.add_argument('--eval_dataset', type=str, default='bedlam', choices=list(dataset_metadata.keys()))
++    parser.add_argument('--eval_dataset', type=str, default='emdb1', choices=list(dataset_metadata.keys()))
+     parser.add_argument('--crop_res', type=int, nargs=2, metavar=('W', 'H'), default=None)
+     parser.add_argument('--size', type=int, default=512)
+     parser.add_argument('--shuffle', action='store_true', default=False)
+@@ -37,10 +38,10 @@
+     parser.add_argument('--save', action='store_true', default=False)
+     parser.add_argument('--is_naive', action='store_true', default=False)
+     parser.add_argument('--use_ttt3r', action='store_true', default=True)
+-    parser.add_argument('--reset_interval', type=int, default=100000000)
++    parser.add_argument('--reset_interval', type=int, default=100)
+     parser.add_argument('--use_fake_K', action='store_true', default=False)
+-    parser.add_argument('--eval_depth', action='store_true', default=True)
+-    parser.add_argument('--eval_reconstruction', action='store_true', default=True)
++    parser.add_argument('--eval_depth', action='store_true', default=False)
++    parser.add_argument('--eval_reconstruction', action='store_true', default=False)
+     return parser
+ 
+ def get_seq_list(metadata, img_path):
+@@ -81,7 +82,7 @@
+     with torch.no_grad():
+         smpl_model.update_smpl_gt_eval(views, args.eval_dataset)
+     gt = prepare_gt(views, args=args)
+-    keep_keys = set(['img', 'img_mask', 'true_shape', 'img_mhmr', 'reset', 'update', 'K_mhmr'])
++    keep_keys = set(['img', 'img_mask', 'true_shape', 'img_mhmr', 'reset', 'update', 'K_mhmr', 'camera_intrinsics', 'camera_pose', 'msk'])
+     for i, view in enumerate(views):
+         views[i] = {key: view[key] for key in keep_keys if key in view}
+     outputs, _ = inference_recurrent_lighter(views, model, device, verbose=False, is_naive=args.is_naive, use_ttt3r=args.use_ttt3r)
+@@ -143,7 +144,7 @@
+             print(f'Evaluating sequence: {seq}')
+             filelist, sampled_indices = get_file_list(metadata, img_path, seq, seq_to_images)
+             gt, pred = run_inference(device, args, metadata, filelist, sampled_indices, annots, model, smpl_model)
+-            K_to_proj = gt['K'] if args.is_naive else pred['K']
++            K_to_proj = gt['K']
+             T_c2w = pred['T_c2w']
+             global_batch = []
+             metrics = defaultdict(list)
+@@ -170,38 +171,21 @@
+                     if is_global:
+                         expand = lambda x: x.expand(len(bestMatch), -1, -1)
+                         global_batch.append({'pred_j3d': geotrf(expand(T_c2w[f_id]), pred_j3d_c[pid]), 'target_j3d': gt['j3d_w'][f_id][gid], 'pred_v3d': geotrf(expand(T_c2w[f_id]), pred_v3d_c[pid]), 'target_v3d': gt['v3d_w'][f_id][gid]})
+-                if args.save:
+-                    color = 0.5 * (gt['img'][f_id].permute(1, 2, 0) + 1.0)
+-                    out_dir = f'{save_dir}/visualization/{seq}/{f_id:06d}'
+-                    for k in ['pts3d', 'conf', 'color', 'camera', 'smpl', 'mask']:
+-                        os.makedirs(os.path.join(out_dir, k), exist_ok=True)
+-                    np.save(os.path.join(out_dir, 'pts3d', f'{f_id:06d}.npy'), pred['pts3d_self'][f_id])
+-                    np.save(os.path.join(out_dir, 'conf', f'pred_{f_id:06d}.npy'), pred['conf_self'][f_id])
+-                    np.save(os.path.join(out_dir, 'color', f'{f_id:06d}.npy'), color)
+-                    np.save(os.path.join(out_dir, 'mask', f'pred_{f_id:06d}.npy'), pred['msk'][f_id])
+-                    np.savez(os.path.join(out_dir, 'camera', f'pred_{f_id:06d}.npz'), pose=pred['T_c2w'][f_id], K=pred['K'][f_id])
+-                    np.savez(os.path.join(out_dir, 'camera', f'gt_{f_id:06d}.npz'), pose=gt['T_c2w'][f_id], K=gt['K'][f_id])
+-                    if len(bestMatch) > 0:
+-                        np.save(os.path.join(out_dir, 'smpl', f'pred_{f_id:06d}.npy'), pred_v3d_c[pid])
+-                        np.save(os.path.join(out_dir, 'smpl', f'gt_{f_id:06d}.npy'), gt['v3d_c'][f_id][gid])
+-                    else:
+-                        np.save(os.path.join(out_dir, 'smpl', f'pred_{f_id:06d}.npy'), pred_v3d_c)
+-                        np.save(os.path.join(out_dir, 'smpl', f'gt_{f_id:06d}.npy'), gt['v3d_c'][f_id])
+                 if args.vis:
+-                    visualize(save_dir=f'{save_dir}/visualization/{seq}', img_path=filelist[f_id], view=gt['img'][f_id], gt_v3d_c=gt['v3d_c'][f_id], pred_v3d_c=pred_v3d_c, K_to_proj=K_to_proj[f_id], gt_K=gt['K'][f_id], bestMatch=bestMatch, smpl_face=smpl_model.smpl_faces['smpl'])
++                    visualize3d(save_dir=f'{save_dir}/visualization/{seq}', img_path=filelist[f_id], view=gt['img'][f_id], gt_v3d_c=gt['v3d_c'][f_id], pred_v3d_c=pred_v3d_c, K_to_proj=K_to_proj[f_id], gt_K=gt['K'][f_id], bestMatch=bestMatch, smpl_face=smpl_model.smpl_faces['smpl'], pred_c2w=pred['T_c2w'][f_id], gt_c2w=gt['T_c2w'][f_id], pred_pts3d=pred['pts3d_self'][f_id] if 'pts3d_self' in pred else None, gt_depthmap=gt['depthmap'][f_id] if 'depthmap' in gt else None, msk=pred['msk'][f_id] if 'msk' in pred else None, conf=pred['conf_self'][f_id] if 'conf_self' in pred else None)
+             metrics['precision'], metrics['recall'], metrics['f1_score'] = compute_prf1(counter['count'], counter['miss'], counter['fp'])
+             if args.eval_depth:
+                 pred_depth = torch.cat(pred['pts3d_self'], 0)[..., -1]
+                 gt_depth = gt['depthmap']
+-                depth_results, error_map, depth_predict, depth_gt = depth_evaluation(pred_depth, gt_depth, max_depth=70, align_with_lad2=True, use_gpu=True, post_clip_max=70)
++                depth_results, error_map, depth_predict, depth_gt = depth_evaluation(pred_depth, gt_depth, max_depth=10, align_with_lad2=True, use_gpu=True, post_clip_max=70)
+                 gathered_depth_metrics.append(depth_results)
+             if args.eval_reconstruction:
+-                reconstruction_keep_keys = ['camera_pose', 'pts3d', 'valid_mask', 'pts3d_in_self_view', 'pts3d_in_other_view', 'img', 'conf']
+-                gt['camera_pose'] = gt['T_c2w']
++                reconstruction_keep_keys = ['camera_pose', 'pts3d', 'valid_mask', 'pts3d_in_self_view', 'pts3d_in_other_view', 'img', 'conf', 'msk']
++                gt['camera_pose'], pred['camera_pose'] = (gt['T_c2w'], pred['T_c2w'])
+                 valid_length = pred['pts3d_in_self_view'].shape[0]
+                 gts = transpose_dict_list(gt, valid_length, keep_keys=reconstruction_keep_keys, squeeze=False)
+                 preds = transpose_dict_list(pred, valid_length, keep_keys=reconstruction_keep_keys, squeeze=False)
+-                gt_pts, pred_pts, gt_factor, pr_factor, masks, monitoring = criterion.get_all_pts3d_t(gts, preds)
++                gt_pts, pred_pts, gt_factor, pr_factor, masks, monitoring = criterion.get_all_pts3d_t(gts, preds, use_pose=False)
+                 pred_scale, gt_scale, pred_shift_z, gt_shift_z = (monitoring['pred_scale'], monitoring['gt_scale'], monitoring['pred_shift_z'], monitoring['gt_shift_z'])
+                 in_camera1 = None
+                 pts_all = []
+@@ -237,7 +221,7 @@
+                 import open3d as o3d
+                 pcd = o3d.geometry.PointCloud()
+                 pcd_dir = f'{save_dir}/visualization/{seq}'
+-                os.makedirs(f'{save_dir}/visualization/', exist_ok=True)
++                os.makedirs(f'{save_dir}/visualization', exist_ok=True)
+                 pcd.points = o3d.utility.Vector3dVector(pts_all_masked.reshape(-1, 3))
+                 pcd.colors = o3d.utility.Vector3dVector(images_all_masked.reshape(-1, 3))
+                 o3d.io.write_point_cloud(pcd_dir + '-pred.ply', pcd)
+@@ -442,6 +426,7 @@
+         if args.eval_reconstruction:
+             pts3ds = [gt['pts3d'] for gt in gts]
+             valid_masks = [gt['valid_mask'] for gt in gts]
++            msks = [gt['msk'] for gt in gts]
+         target_out['K'] = torch.cat(intrinsics, 0)
+         target_out['K_mhmr'] = torch.cat(K_mhmr, 0)
+         target_out['T_c2w'] = torch.cat(camera_pose, 0)
+@@ -451,6 +436,7 @@
+         if args.eval_reconstruction:
+             target_out['pts3d'] = torch.cat(pts3ds, 0)
+             target_out['valid_mask'] = torch.cat(valid_masks, 0)
++            target_out['msk'] = torch.cat(msks, 0)
+         if 'T_w2c' in gts[0]:
+             T_w2c_list = [gt['T_w2c'] for gt in gts]
+             target_out['T_w2c'] = torch.cat(T_w2c_list, 0)
+@@ -498,10 +484,9 @@
+             msks = [unpad_image(m, [H, W]) for m in msks]
+         else:
+             msks = [torch.zeros(1, H, W) for _ in range(B)]
+-        if args.eval_depth:
+-            pred_out['pts3d_self'] = pts3ds_self_to_save
+-            pred_out['conf_self'] = conf_self
+-            pred_out['msk'] = msks
++        pred_out['pts3d_self'] = pts3ds_self_to_save
++        pred_out['conf_self'] = conf_self
++        pred_out['msk'] = msks
+         if args.eval_reconstruction:
+             pred_out['pts3d_in_self_view'] = torch.cat([output['pts3d_in_self_view'] for output in outputs['pred']], dim=0)
+             pred_out['pts3d_in_other_view'] = torch.cat([output['pts3d_in_other_view'] for output in outputs['pred']], dim=0)
+@@ -525,6 +510,8 @@
+         pred_out['loc'] = [output.get('smpl_loc', torch.empty(1, 0, 2))[0] for output in outputs['pred']]
+         del outputs
+         return pred_out
++    os.makedirs(args.output_dir, exist_ok=True)
++    shutil.copy('eval/global_human/launch.py', args.output_dir)
+     model = ARCroco3DStereo.from_pretrained(args.weights)
+     smpl_model = SMPLModel('cpu', model_args={'patch_size': model.croco_args['patch_size'], 'mhmr_img_res': model.mhmr_img_res, 'bb_patch_size': model.bb_patch_size}, eval_args={'dataset': args.eval_dataset, 'use_fake_K': args.use_fake_K})
+     smpl_layer = SMPL_Layer(type='smplx', gender='neutral', num_betas=10, kid=False, person_center='head')
+--- a/eval/global_human/criterion.py
++++ b/eval/global_human/criterion.py
+@@ -103,7 +103,7 @@
+         return torch.norm(a - b, dim=-1)
+ L21 = L21Loss()
+ 
+-def get_pred_pts3d(gt, pred, use_pose=False):
++def get_pred_pts3d(gt, pred, use_pose=False, pred_camera1=None):
+     if 'depth' in pred and 'pseudo_focal' in pred:
+         try:
+             pp = gt['camera_intrinsics'][..., :2, 2]
+@@ -112,15 +112,14 @@
+         pts3d = depthmap_to_pts3d(**pred, pp=pp)
+     elif 'pts3d' in pred:
+         pts3d = pred['pts3d']
+-    elif 'pts3d_in_other_view' in pred:
+-        assert use_pose is True
+-        return pred['pts3d_in_other_view']
+-    if use_pose:
++    elif use_pose and 'pts3d_in_self_view' in pred and (pred_camera1 is not None):
+         camera_pose = pred.get('camera_pose')
+         pts3d = pred.get('pts3d_in_self_view')
+         assert camera_pose is not None
+         assert pts3d is not None
+-        pts3d = geotrf(pose_encoding_to_camera(camera_pose), pts3d)
++        pts3d = geotrf(pred_camera1, geotrf(camera_pose, pts3d))
++    elif 'pts3d_in_other_view' in pred:
++        pts3d = pred['pts3d_in_other_view']
+     return pts3d
+ 
+ def Sum(losses, masks, conf=None):
+@@ -213,7 +212,7 @@
+         self.gt_scale = gt_scale
+         self.fix_first = fix_first
+ 
+-    def get_all_pts3d_t(self, gts, preds, dist_clip=None):
++    def get_all_pts3d_t(self, gts, preds, dist_clip=None, use_pose=False):
+         in_camera1 = inv(gts[0]['camera_pose'])
+         gt_pts = []
+         valids = []
+@@ -225,7 +224,7 @@
+                 dis = gt['pts3d'].norm(dim=-1)
+                 valid = valid & (dis <= dist_clip)
+             valids.append(valid)
+-            pr_pts.append(get_pred_pts3d(gt, preds[i], use_pose=True))
++            pr_pts.append(get_pred_pts3d(gt, preds[i], use_pose=use_pose))
+         if self.norm_mode:
+             pr_pts, pr_factor = normalize_pointcloud_t(pr_pts, self.norm_mode, valids, fix_first=self.fix_first, gt=False)
+         else:
+@@ -305,8 +304,8 @@
+ 
+ class Regr3D_t_ShiftInv(Regr3D_t):
+ 
+-    def get_all_pts3d_t(self, gts, preds):
+-        gt_pts, pred_pts, gt_factor, pr_factor, masks, monitoring = super().get_all_pts3d_t(gts, preds)
++    def get_all_pts3d_t(self, gts, preds, use_pose=False):
++        gt_pts, pred_pts, gt_factor, pr_factor, masks, monitoring = super().get_all_pts3d_t(gts, preds, use_pose=use_pose)
+         gt_zs = [gt_pt[..., 2] for gt_pt in gt_pts]
+         pred_zs = [pred_pt[..., 2] for pred_pt in pred_pts]
+         gt_shift_z = get_joint_pointcloud_depth(gt_zs, masks)[:, None, None]
+@@ -320,8 +319,8 @@
+ 
+ class Regr3D_t_ScaleInv(Regr3D_t):
+ 
+-    def get_all_pts3d_t(self, gts, preds):
+-        gt_pts, pred_pts, gt_factor, pr_factor, masks, monitoring = super().get_all_pts3d_t(gts, preds)
++    def get_all_pts3d_t(self, gts, preds, use_pose=False):
++        gt_pts, pred_pts, gt_factor, pr_factor, masks, monitoring = super().get_all_pts3d_t(gts, preds, use_pose=use_pose)
+         pred_pts_all = [x.clone() for x in pred_pts]
+         _, gt_scale = get_joint_pointcloud_center_scale(gt_pts, masks)
+         _, pred_scale = get_joint_pointcloud_center_scale(pred_pts_all, masks)
+--- a/eval/global_human/utils.py
++++ b/eval/global_human/utils.py
+@@ -234,6 +234,67 @@
+     pred_rend_array = render_meshes(img_array.copy(), pred_verts, pred_faces, {'focal': focal, 'princpt': princpt}, color=pred_colors)
+     img = np.concatenate([img_array, pred_rend_array, gt_rend_array], 1)
+     Image.fromarray(img).save(os.path.join(f'{save_dir}/{os.path.splitext(os.path.basename(img_path))[0]}.jpg'))
++import os
++import numpy as np
++from PIL import Image
++
++def visualize3d(save_dir, img_path, view, gt_v3d_c, pred_v3d_c, K_to_proj, gt_K, bestMatch, smpl_face, pred_c2w=None, gt_c2w=None, pred_pts3d=None, gt_depthmap=None, msk=None, conf=None):
++    from dust3r.utils import render_meshes, denormalize_rgb
++    from viser_utils import get_color
++    os.makedirs(save_dir, exist_ok=True)
++    base_filename = os.path.splitext(os.path.basename(img_path))[0]
++    n_humans_i = pred_v3d_c.shape[0]
++    img_array = denormalize_rgb(view.cpu().numpy())
++    focal = K_to_proj[[0, 1], [0, 1]].cpu().numpy()
++    princpt = K_to_proj[[0, 1], [-1, -1]].cpu().numpy()
++    gt_focal = gt_K[[0, 1], [0, 1]].cpu().numpy()
++    gt_princpt = gt_K[[0, 1], [-1, -1]].cpu().numpy()
++    gt_color_indices = list(range(gt_v3d_c.shape[0]))
++    pred_color_indices = [-1] * n_humans_i
++    for pid, gid in bestMatch:
++        pred_color_indices[pid] = gt_color_indices[gid]
++    next_color_idx = max(gt_color_indices) + 1 if gt_color_indices else 0
++    for i in range(len(pred_color_indices)):
++        if pred_color_indices[i] == -1:
++            pred_color_indices[i] = next_color_idx
++            next_color_idx += 1
++    gt_verts, gt_faces = ([], [])
++    for j in range(gt_v3d_c.shape[0]):
++        gt_verts.append(gt_v3d_c[j].cpu().numpy().reshape(-1, 3))
++        gt_faces.append(smpl_face)
++    gt_colors = [get_color(gt_color_indices[j]) / 255 for j in range(len(gt_verts))]
++    gt_rend_array = render_meshes(img_array.copy(), gt_verts, gt_faces, {'focal': gt_focal, 'princpt': gt_princpt}, color=gt_colors)
++    pred_verts, pred_faces = ([], [])
++    for j in range(n_humans_i):
++        pred_verts.append(pred_v3d_c[j].cpu().numpy().reshape(-1, 3))
++        pred_faces.append(smpl_face)
++    pred_colors = [get_color(pred_color_indices[j]) / 255 for j in range(len(pred_verts))]
++    pred_rend_array = render_meshes(img_array.copy(), pred_verts, pred_faces, {'focal': focal, 'princpt': princpt}, color=pred_colors)
++    img = np.concatenate([img_array, pred_rend_array, gt_rend_array], 1)
++    Image.fromarray(img).save(os.path.join(save_dir, f'{base_filename}.jpg'))
++
++    def to_np(data):
++        if data is None:
++            return None
++        return data.detach().cpu().numpy() if hasattr(data, 'cpu') else data
++    unified_data = {'image': img_array, 'pred_K': K_to_proj.cpu().numpy(), 'gt_K': gt_K.cpu().numpy(), 'smpl_faces': np.array(smpl_face)}
++    unified_data['pred_verts'] = np.array(pred_verts) if len(pred_verts) > 0 else np.empty((0, 6890, 3))
++    unified_data['gt_verts'] = np.array(gt_verts) if len(gt_verts) > 0 else np.empty((0, 6890, 3))
++    unified_data['pred_colors'] = np.array(pred_colors)
++    unified_data['gt_colors'] = np.array(gt_colors)
++    if pred_c2w is not None:
++        unified_data['pred_c2w'] = to_np(pred_c2w)
++    if gt_c2w is not None:
++        unified_data['gt_c2w'] = to_np(gt_c2w)
++    if pred_pts3d is not None:
++        unified_data['pred_pts3d'] = to_np(pred_pts3d)
++    if gt_depthmap is not None:
++        unified_data['gt_depthmap'] = to_np(gt_depthmap)
++    if msk is not None:
++        unified_data['msk'] = to_np(msk)
++    if conf is not None:
++        unified_data['conf'] = to_np(conf)
++    np.savez_compressed(os.path.join(save_dir, f'{base_filename}.npz'), **unified_data)
+ 
+ def write_log(log_path, dataset, seq, counter, metrics):
+     with open(log_path, 'a') as f:
+@@ -617,7 +678,7 @@
+             depthmap = cv2.resize(depthmap, (2 * halfw, 2 * halfh), interpolation=cv2.INTER_NEAREST)
+         W2, H2 = depthmap.shape
+         depthmap[~np.isfinite(depthmap)] = 0
+-        depthmap[depthmap > 200.0] = 0.0
++        depthmap[depthmap > 20.0] = 0.0
+         pts3d, valid_mask = depthmap_to_absolute_camera_coordinates(depthmap, intrinsics[i], camera_poses[i])
+         valid_mask = valid_mask & np.isfinite(pts3d).all(axis=-1)
+         if verbose:
+--- a/eval/global_human/metadata.py
++++ b/eval/global_human/metadata.py
+@@ -10,7 +10,7 @@
+ dataset_metadata = {'bedlam': {'img_path': 'external/assets', 'dir_path_func': lambda img_path, seq: os.path.join(f'{img_path}/Test/{seq}/rgb'), 'seq_list': None, 'full_seq': True, 'mask_path_func': lambda filelist: [f.replace('/rgb/', '/mask/') for f in filelist], 'split': 'Test', 'subsample': 25, 'get_view_func': lambda inputs: load_view_bedlam(*inputs[:2]), 'get_seq_func': None, 'is_global': lambda split: False}, 'agora': {'img_path': 'external/assets', 'dir_path_func': lambda img_path, seq: os.path.join(f'{img_path}/validation/rgb'), 'seq_list': None, 'full_seq': True, 'mask_path_func': lambda filelist: [f.replace('/rgb/', '/mask/') for f in filelist], 'split': 'validation', 'subsample': 1, 'get_view_func': lambda inputs: load_view_agora(*inputs[:2]), 'get_seq_func': lambda img_path, split, annots: get_seq_agora(img_path, split, annots), 'get_annot_func': lambda img_path, split: None, 'is_global': lambda split: False}, '3dpw': {'img_path': 'external/assets', 'dir_path_func': lambda img_path, seq: os.path.join(f'{img_path}/imageFiles/{seq}'), 'seq_list': None, 'full_seq': True, 'mask_path_func': lambda filelist: [], 'split': 'test', 'subsample': 1, 'get_view_func': lambda inputs: load_view_3dpw(*inputs[:3]), 'get_seq_func': lambda img_path, split, annots: get_seq_3dpw(img_path, split, annots), 'get_annot_func': lambda img_path, split: get_annot(img_path, split, '3dpw'), 'is_global': lambda split: False}, 'emdb1': create_emdb(1), 'emdb2': create_emdb(2), 'rich': {'img_path': 'external/assets', 'dir_path_func': lambda img_path, seq: os.path.join(f'{img_path}/{seq}'), 'seq_list': None, 'full_seq': True, 'mask_path_func': lambda filelist: [], 'split': 'test', 'subsample': 1, 'get_view_func': lambda inputs: load_view_rich(*inputs), 'get_seq_func': lambda img_path, split, annots: get_seq_rich(img_path, split, annots), 'get_annot_func': lambda img_path, split: get_annot_rich(img_path), 'is_global': lambda split: True}}
+ 
+ def get_annot(img_path, split, dataset):
+-    annot_file = os.path.join(f'eval/global_human/annots/{dataset}_{split}.pkl')
++    annot_file = os.path.join(f'data/3dpw/annots/{dataset}_{split}.pkl')
+     with open(annot_file, 'rb') as f:
+         annots = pickle.load(f)
+     return annots
+@@ -23,7 +23,7 @@
+     return annots
+ 
+ def get_annot_rich(img_path):
+-    annots = torch.load(os.path.join(img_path, 'hmr4d_support/rich_test_labels.pt'))
++    annots = torch.load(os.path.join(img_path, 'hmr4d_support/rich_test_labels.pt'), weights_only=False)
+     cam_params = torch.load(os.path.join(img_path, 'resource/cam2params.pt'))
+     for vid in list(annots.keys()):
+         _, sname, cname = vid.split('/')

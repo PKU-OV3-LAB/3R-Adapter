@@ -1,0 +1,77 @@
+{
+  "a_frozen_match1": [
+    {
+      "window_size": 1,
+      "day": 7.564357992974362,
+      "night": 3.689236111111111
+    },
+    {
+      "window_size": 3,
+      "day": 18.4944686205631,
+      "night": 11.139684606481481
+    },
+    {
+      "window_size": 5,
+      "day": 24.375557070203953,
+      "night": 16.64134837962963
+    },
+    {
+      "window_size": 7,
+      "day": 29.598123001101033,
+      "night": 22.218605324074073
+    }
+  ],
+  "b_offset_coverage": [
+    {
+      "window_size": 1,
+      "single_layer": 3.706062356243224,
+      "all_layers": 24.0291414617341,
+      "all_references": 31.26707062360853
+    },
+    {
+      "window_size": 3,
+      "single_layer": 28.716600297899504,
+      "all_layers": 81.99876381838264,
+      "all_references": 86.19230416121555
+    },
+    {
+      "window_size": 5,
+      "single_layer": 62.439128187980664,
+      "all_layers": 91.55302915159437,
+      "all_references": 93.49996557185153
+    },
+    {
+      "window_size": 7,
+      "single_layer": 83.26235421669656,
+      "all_layers": 94.73791936448106,
+      "all_references": 96.04936996488328
+    }
+  ],
+  "c_night_match1": [
+    {
+      "block": 19,
+      "frozen": 2.857349537037037,
+      "adapted": 3.84741512345679
+    },
+    {
+      "block": 21,
+      "frozen": 14.375,
+      "adapted": 19.207658179012345
+    },
+    {
+      "block": 23,
+      "frozen": 26.46556712962963,
+      "adapted": 33.18721064814815
+    },
+    {
+      "block": 25,
+      "frozen": 36.0228587962963,
+      "adapted": 44.40875771604937
+    }
+  ],
+  "night_block31_limitation": {
+    "block": 31,
+    "frozen": 52.942708333333336,
+    "adapted": 52.16290509259259
+  }
+}

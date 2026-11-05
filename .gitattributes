@@ -1,0 +1,5 @@
+# Keep original CSV evidence bytes, including conventional CRLF line endings.
+*.csv -text whitespace=cr-at-eol
+# Preserve pinned upstream bytes and valid unified-diff context lines.
+third_party/** -whitespace
+experiments/patches/*.patch -whitespace

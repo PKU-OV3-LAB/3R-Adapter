@@ -1,0 +1,11 @@
+# @package _global_
+
+defaults:
+  - model: Pi3_Adapter3R.yaml
+  - train: train_pi3_Adapter3R_highres.yaml
+  - data: low_light.yaml
+  - general: default.yaml
+  - extras: default.yaml
+  - override hydra/job_logging: custom
+  - override hydra/hydra_logging: colorlog
+  - _self_

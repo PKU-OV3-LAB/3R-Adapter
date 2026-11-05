@@ -1,0 +1,183 @@
+{
+  "schema_version": 1,
+  "dataset": "Oxford Day&Night",
+  "grid_layout": "pixel_center",
+  "sampling_layout": "reference_major",
+  "scene_protocol": "full_image_518_umeyama_icp_5m",
+  "pose_protocol": "20_frames_evo_sim3_rmse_equal_sequence_mean",
+  "aggregation": "three seed mean and sample standard deviation, ddof=1",
+  "rows": [
+    {
+      "method": "CUT3R + 3R-Adapter",
+      "status": "verified",
+      "seeds": 3,
+      "accuracy": 0.2244310748135481,
+      "completeness": 0.5179187367173842,
+      "chamfer": 0.7423498115309322,
+      "normal_consistency": 0.5310080446501099,
+      "ate": 0.38545747102493433,
+      "rpe_t": 0.2643469408954977,
+      "rpe_r": 4.954943121085802,
+      "accuracy_sd": 0.001352769914326189,
+      "completeness_sd": 0.021306461074809477,
+      "chamfer_sd": 0.01995686099119915,
+      "normal_consistency_sd": 0.0006721156606462823,
+      "ate_sd": 0.015215406033212456,
+      "rpe_t_sd": 0.02248686941820265,
+      "rpe_r_sd": 0.6888186227410183,
+      "scene_sequences": 51,
+      "pose_sequences": 51,
+      "pose_failures": 0
+    },
+    {
+      "method": "Pi3 + 3R-Adapter",
+      "status": "verified",
+      "seeds": 3,
+      "accuracy": 0.10055642042199638,
+      "completeness": 0.36219394832439983,
+      "chamfer": 0.46275036874639613,
+      "normal_consistency": 0.548948001874974,
+      "ate": 0.14305237484297162,
+      "rpe_t": 0.1332012714789814,
+      "rpe_r": 1.3795190030705484,
+      "accuracy_sd": 0.001484093080096998,
+      "completeness_sd": 0.009083744854822206,
+      "chamfer_sd": 0.007853465367653849,
+      "normal_consistency_sd": 0.0002788311526652348,
+      "ate_sd": 0.021878639932305426,
+      "rpe_t_sd": 0.010862783090607052,
+      "rpe_r_sd": 0.48167556950744184,
+      "scene_sequences": 51,
+      "pose_sequences": 51,
+      "pose_failures": 0
+    }
+  ],
+  "runs": [
+    {
+      "backbone": "pi3",
+      "seed": 1111,
+      "metrics": {
+        "accuracy": 0.10168758806378127,
+        "completeness": 0.36037007152149625,
+        "normal_consistency": 0.5491899193005766,
+        "ate": 0.12117276511432581,
+        "rpe_t": 0.12068496469876042,
+        "rpe_r": 1.9046408765113858,
+        "chamfer": 0.4620576595852776
+      },
+      "base_sha256": "33580e4702ac671558aedeab1148fd08118f7ce45bdbeb99f3e3cf340062875d",
+      "fresh_initialization": true,
+      "adapter_core_sha256": "337d9b41cb42857f75e519cedea9086b169789d145dd4dc578c526a4838c5cf4",
+      "selected_checkpoint_sha256": "a5e8caa12753c0e3df1a80b02e10b8fbffb6121cd8202b9814c3dd9d45611605",
+      "finite_adapters": true,
+      "changed_adapter_tensors": 112,
+      "unchanged_frozen_tensors": 1210,
+      "source_csv_sha256": "258518ffbd2aefa1740dbd29c41630b8f21d9497620ff34b411213b6aebf62a0"
+    },
+    {
+      "backbone": "pi3",
+      "seed": 1112,
+      "metrics": {
+        "accuracy": 0.1011056805789887,
+        "completeness": 0.3541605233657984,
+        "normal_consistency": 0.5490110371324243,
+        "ate": 0.14305431456463163,
+        "rpe_t": 0.1401711867050488,
+        "rpe_r": 0.9582236410170996,
+        "chamfer": 0.455266203944787
+      },
+      "base_sha256": "33580e4702ac671558aedeab1148fd08118f7ce45bdbeb99f3e3cf340062875d",
+      "fresh_initialization": true,
+      "adapter_core_sha256": "337d9b41cb42857f75e519cedea9086b169789d145dd4dc578c526a4838c5cf4",
+      "selected_checkpoint_sha256": "735f6addebec84aca90913dfbe8441250eb6a6e14f8a94efacae1726b77604f2",
+      "finite_adapters": true,
+      "changed_adapter_tensors": 112,
+      "unchanged_frozen_tensors": 1210,
+      "source_csv_sha256": "da6d86362411aa37d7f7417e3e56ed52a58448a23852abf343f0f240ff113032"
+    },
+    {
+      "backbone": "pi3",
+      "seed": 1113,
+      "metrics": {
+        "accuracy": 0.09887599262321918,
+        "completeness": 0.37205125008590473,
+        "normal_consistency": 0.548643049191921,
+        "ate": 0.16493004484995744,
+        "rpe_t": 0.13874766303313488,
+        "rpe_r": 1.27569249168316,
+        "chamfer": 0.47092724270912384
+      },
+      "base_sha256": "33580e4702ac671558aedeab1148fd08118f7ce45bdbeb99f3e3cf340062875d",
+      "fresh_initialization": true,
+      "adapter_core_sha256": "337d9b41cb42857f75e519cedea9086b169789d145dd4dc578c526a4838c5cf4",
+      "selected_checkpoint_sha256": "945a43e00c7d00604dd263ddcca249326ca7003d892f0edb672243c682c9d507",
+      "finite_adapters": true,
+      "changed_adapter_tensors": 112,
+      "unchanged_frozen_tensors": 1210,
+      "source_csv_sha256": "3708929daf271f872fcb840749df51b02437f3cb3635f9e9137290c742d09821"
+    },
+    {
+      "backbone": "cut3r",
+      "seed": 1111,
+      "metrics": {
+        "accuracy": 0.2229108474633156,
+        "completeness": 0.5421845618032529,
+        "normal_consistency": 0.5302544513488198,
+        "ate": 0.3945852291890936,
+        "rpe_t": 0.259731087010611,
+        "rpe_r": 4.670800911577622,
+        "chamfer": 0.7650954092665685
+      },
+      "base_sha256": "45f7e98a0a64dbeb54901ae2b878cd8cd125f20a4497316483f0bd6f109f8103",
+      "fresh_initialization": true,
+      "adapter_core_sha256": "337d9b41cb42857f75e519cedea9086b169789d145dd4dc578c526a4838c5cf4",
+      "selected_checkpoint_sha256": "9df1c5c1fda5943a05bed688446f50d00afe15400123e0033b6d8cd8d2d3fdc3",
+      "finite_adapters": true,
+      "changed_adapter_tensors": 112,
+      "unchanged_frozen_tensors": 1248,
+      "source_csv_sha256": "c74e04ee02c22c2ebe550c8285060779697ca73474f2fa51f27eaa03bfbcd08d"
+    },
+    {
+      "backbone": "cut3r",
+      "seed": 1112,
+      "metrics": {
+        "accuracy": 0.2248802736388905,
+        "completeness": 0.509299025450905,
+        "normal_consistency": 0.5315455034103951,
+        "ate": 0.36789276104910085,
+        "rpe_t": 0.24452615987935636,
+        "rpe_r": 4.4536492449645815,
+        "chamfer": 0.7341792990897956
+      },
+      "base_sha256": "45f7e98a0a64dbeb54901ae2b878cd8cd125f20a4497316483f0bd6f109f8103",
+      "fresh_initialization": true,
+      "adapter_core_sha256": "337d9b41cb42857f75e519cedea9086b169789d145dd4dc578c526a4838c5cf4",
+      "selected_checkpoint_sha256": "0038cc9e5313ad2537d520518f5131c661d81eb10128f9ef13cd864bbe9ba794",
+      "finite_adapters": true,
+      "changed_adapter_tensors": 112,
+      "unchanged_frozen_tensors": 1248,
+      "source_csv_sha256": "197e8a5a35618e323488948fbcd854d263dbfaa78d4a629539c03d974025d9ee"
+    },
+    {
+      "backbone": "cut3r",
+      "seed": 1113,
+      "metrics": {
+        "accuracy": 0.2255021033384382,
+        "completeness": 0.5022726228979945,
+        "normal_consistency": 0.5312241791911146,
+        "ate": 0.3938944228366087,
+        "rpe_t": 0.28878357579652575,
+        "rpe_r": 5.740379206715205,
+        "chamfer": 0.7277747262364325
+      },
+      "base_sha256": "45f7e98a0a64dbeb54901ae2b878cd8cd125f20a4497316483f0bd6f109f8103",
+      "fresh_initialization": true,
+      "adapter_core_sha256": "337d9b41cb42857f75e519cedea9086b169789d145dd4dc578c526a4838c5cf4",
+      "selected_checkpoint_sha256": "0697432d419985c0c1f624144998934c8af6773d2f89e108dc58d9a94a390c8e",
+      "finite_adapters": true,
+      "changed_adapter_tensors": 112,
+      "unchanged_frozen_tensors": 1248,
+      "source_csv_sha256": "2dbf2160ab49c011eed4f6f5f6e7fa9d0d94aa5f4f09286c0c8a6349cd64fe48"
+    }
+  ]
+}

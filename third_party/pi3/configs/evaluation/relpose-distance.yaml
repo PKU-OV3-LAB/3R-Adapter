@@ -1,0 +1,28 @@
+# @package _global_
+
+defaults:
+  - override /data: relpose-distance
+
+name: relpose-distance
+
+pi3:
+  # pretrained_model_name_or_path: yyfz233/Pi3
+  pretrained_model_name_or_path: checkpoints/Pi3
+  ckpt_path: assets/SET_PATH
+eval_datasets:
+  # - sintel
+  # - tum
+  # - scannetv2
+  - OxfordDayAndNight
+
+no_crop: False
+load_img_size: 518
+pose_eval_stride: 1
+
+device: cuda
+
+verbose: False
+
+seed: 42
+
+save_suffix: train_peft_3radapter_30t35_highres_lr1en4

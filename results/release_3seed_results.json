@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "evidence": "completed fresh-training experiments from October 2026; verification through the newly packaged full evaluation entries is recorded separately",
+  "aggregation": "mean of per-seed metrics, sample standard deviation ddof=1",
+  "paper_tables_changed": false,
+  "pi3": {
+    "config": "configs/release/pi3_3seed.json",
+    "seeds": [1111, 1112, 1113],
+    "sequences_per_seed": 51,
+    "metrics": {
+      "ATE": {"mean": 0.24884295921572727, "std": 0.004381727685818114},
+      "RPE trans": {"mean": 0.19951205995533458, "std": 0.00468899707578286},
+      "RPE rot": {"mean": 2.93057669630184, "std": 0.08413715003223236},
+      "Acc-mean": {"mean": 0.13068040128552522, "std": 0.015344695052048432},
+      "Comp-mean": {"mean": 0.4827570375221344, "std": 0.010112361893984706},
+      "Chamfer": {"mean": 0.6134374388076596, "std": 0.025437629282389324},
+      "NC-mean": {"mean": 0.5442027247482675, "std": 0.002076195765100847}
+    },
+    "per_seed": [
+      {"seed": 1111, "ATE": 0.24379761495016278, "RPE trans": 0.2012334403126818, "RPE rot": 2.8767557834210313, "Acc-mean": 0.11797958473255227, "Comp-mean": 0.47506310162298554, "Chamfer": 0.5930426863555378, "NC-mean": 0.5450141183507442},
+      {"seed": 1112, "ATE": 0.2510371295309854, "RPE trans": 0.19420566051651983, "RPE rot": 2.887440439628397, "Acc-mean": 0.14773018386176193, "Comp-mean": 0.4942107377438317, "Chamfer": 0.6419409216055936, "NC-mean": 0.5418433598146644},
+      {"seed": 1113, "ATE": 0.2516941331660336, "RPE trans": 0.20309707903680208, "RPE rot": 3.027533865856092, "Acc-mean": 0.12633143526226145, "Comp-mean": 0.47899727319958596, "Chamfer": 0.6053287084618474, "NC-mean": 0.5457506960793939}
+    ]
+  },
+  "human3r": {
+    "config": "configs/release/human3r_3seed.json",
+    "seeds": [0, 1, 2],
+    "sequences_per_seed": 748,
+    "scene_cutoff_m": 15,
+    "depth_metric_max_m": 16,
+    "human_metric_unit": "mm",
+    "metrics": {
+      "PA-PVE": {"mean": 44.43333333333334, "std": 0.28867513459481287},
+      "Metric-PVE": {"mean": 216.16666666666666, "std": 5.173329037798914},
+      "PA-MPJPE": {"mean": 37.699999999999996, "std": 0.2645751311064588},
+      "Metric-MPJPE": {"mean": 214.86666666666667, "std": 4.994330118577802},
+      "Scene Acc": {"mean": 0.09438939332591108, "std": 0.0002490528711709857},
+      "Scene Comp": {"mean": 0.050757380461852276, "std": 0.00029394483635929554},
+      "Scene Chamfer": {"mean": 0.14514677378776333, "std": 0.00044405905089250084},
+      "Scene NC": {"mean": 0.8572747503899406, "std": 0.00031478275969976864}
+    },
+    "per_seed": [
+      {"seed": 0, "PA-PVE": 44.6, "Metric-PVE": 219.4, "PA-MPJPE": 37.8, "Metric-MPJPE": 217.8, "Scene Acc": 0.09465072276984479, "Scene Comp": 0.05072649855092496, "Scene Chamfer": 0.14537722132076975, "Scene NC": 0.8572696129481192},
+      {"seed": 1, "PA-PVE": 44.1, "Metric-PVE": 210.2, "PA-MPJPE": 37.4, "Metric-MPJPE": 209.1, "Scene Acc": 0.09436268784566175, "Scene Comp": 0.051065547052519616, "Scene Chamfer": 0.14542823489818135, "Scene NC": 0.8569625677950116},
+      {"seed": 2, "PA-PVE": 44.6, "Metric-PVE": 218.9, "PA-MPJPE": 37.9, "Metric-MPJPE": 217.7, "Scene Acc": 0.09415476936222669, "Scene Comp": 0.050480095782112246, "Scene Chamfer": 0.14463486514433893, "Scene NC": 0.857592070426691}
+    ]
+  }
+}

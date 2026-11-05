@@ -1,0 +1,21 @@
+cff-version: 1.2.0
+message: "If you use this work, please cite the 3R-Adapter paper."
+type: software
+title: "3R-Adapter: Retrieval, Rewiring, and Refinement for Efficient Adaptation of 3D Reconstruction Model"
+authors:
+  - family-names: Ai
+    given-names: Zixiang
+    affiliation: Peking University
+  - family-names: Cui
+    given-names: Zhenyu
+    affiliation: Tsinghua University
+  - family-names: Zou
+    given-names: Xu
+    affiliation: Huazhong University of Science and Technology
+  - family-names: Zhou
+    given-names: Jiahuan
+    affiliation: Peking University
+version: 0.1.0
+date-released: 2026-11-05
+repository-code: "https://github.com/PKU-OV3-LAB/NeurIPS2026-3R-Adapter"
+url: "https://pku-ov3-lab.github.io/NeurIPS2026-3R-Adapter/"

@@ -1,0 +1,27 @@
+# @package _global_
+
+defaults:
+  - override /data: relpose-angular
+
+name: relpose-angular
+
+pi3:
+  # pretrained_model_name_or_path: yyfz233/Pi3
+  pretrained_model_name_or_path: checkpoints/Pi3
+  ckpt_path: assets/SET_PATH
+
+eval_datasets:
+  # - Re10K
+  # - CO3Dv2
+  - OxfordDayAndNight
+
+no_crop: False
+load_img_size: 518
+
+device: cuda
+
+verbose: False
+
+seed: 42
+
+save_suffix: null

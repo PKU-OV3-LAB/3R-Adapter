@@ -1,0 +1,28 @@
+# @package _global_
+
+trainer: trainers.pi3_trainer.Pi3Trainer
+
+train:
+  image_num_range: [2, 24]     # hres
+  max_img_per_gpu: 16             # hres
+
+  # low resolution
+  resolution: 
+    - [224, 224]
+
+  num_workers: 6
+  batch_size: 8              # not use, dynamic batch size
+  num_epoch: 20
+  iters_per_epoch: 800
+
+  optimizer:
+    type: AdamW
+    lr: 5e-6
+    weight_decay: 5e-2
+    betas: [0.9, 0.95]
+    filter_bias_and_bn: true
+    encoder_lr: 5e-7
+
+model:
+  ckpt: checkpoints/Pi3/model.safetensors # <path-to-your-pretrain-checkpoint> null
+  load_vggt: false

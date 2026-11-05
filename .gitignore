@@ -1,0 +1,25 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+build/
+dist/
+.DS_Store
+.venv/
+outputs/
+/checkpoints/
+/datasets/
+*.pth
+*.pt
+*.safetensors
+*.bin
+/weights/
+*.log
+# Website and media are published as Release assets, outside Git history.
+/docs/
+/site/
+/assets/
+*.mp4
+*.mov
+*.webm
+/project-page.zip

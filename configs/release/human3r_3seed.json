@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "backbone": "human3r",
+  "dataset": "BEDLAM",
+  "seeds": [0, 1, 2],
+  "default_seed": 0,
+  "grid_layout": "pixel_center",
+  "sampling_layout": "reference_major",
+  "region_scale": 0.2,
+  "fusion_factor": 0.1,
+  "residual_scale": 0.5,
+  "reduction_dim": 128,
+  "samples_per_reference": 4,
+  "decoder_layers": [8, 9, 10, 11],
+  "checkpoint_template": "human3r/seed{seed}/checkpoint-best.pth",
+  "checkpoint_selection": "minimum validation median loss within each seed",
+  "training": {
+    "config_name": "train_human3r_adapter-bedlam",
+    "seed_key": "seed",
+    "overrides": {
+      "model": "ARCroco3DStereo(ARCroco3DStereoConfig(freeze='encoder_and_decoder_and_head', state_size=768, state_pe='2d', pos_embed='RoPE100', rgb_head=True, pose_head=True, msk_head=True, patch_embed_cls='ManyAR_PatchEmbed', img_size=(512,512), head_type='dpt', output_mode='pts3d+pose+smpl', depth_mode=('exp',-inf,inf), conf_mode=('exp',1,inf), pose_mode=('exp',-inf,inf), enc_embed_dim=1024, enc_depth=24, enc_num_heads=16, dec_embed_dim=768, dec_depth=12, dec_num_heads=12, landscape_only=False, backbone='dinov2_vitl14', mhmr_img_res=896, use_focal=True, use_adapter=True, reduction_dim=128, peft_layers=[8,9,10,11], adapter_type='Adapter3R', head_mlp_ratio=2, fusion_mlp_ratio=2, detach=False))",
+      "train_criterion": "ConfLoss(Regr3DPoseBatchList(L21, norm_mode='?avg_dis'), alpha=0.2) + SMPLLoss(L1) + RGBLoss(MSE)",
+      "epochs": "40",
+      "start_epoch": "0",
+      "save_freq": "40",
+      "keep_freq": "0",
+      "print_img_freq": "20000"
+    }
+  },
+  "evaluation": {
+    "sequences": 748,
+    "scene_cutoff_m": 15,
+    "depth_metric_max_m": 16,
+    "frame_subsample": 25,
+    "aggregation": "arithmetic mean of metrics from three independent seed checkpoints; sample standard deviation (ddof=1)"
+  }
+}

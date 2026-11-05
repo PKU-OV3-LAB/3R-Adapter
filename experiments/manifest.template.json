@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "experiment": null,
+  "table": null,
+  "created_at": null,
+  "runtime": {
+    "platform": null,
+    "python": null
+  },
+  "repository": {
+    "revision": null,
+    "dirty": null,
+    "diff_sha256": null,
+    "untracked_files": []
+  },
+  "checkpoint": {
+    "id": null,
+    "sha256": null
+  },
+  "command_sha256": null,
+  "metrics": {},
+  "metric_sources": []
+}

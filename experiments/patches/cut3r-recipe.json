@@ -1,0 +1,32 @@
+{
+  "revision": "8bc15dc92a6d7fd92920b4ec81540d3dec7d3ecf",
+  "base_normalized_sha256": {
+    "src/dust3r/model.py": "2871812fe1baadf97e62d745c8695d7b90cccf8ee85ca0a3cca93215d97d2d9c",
+    "src/dust3r/utils/misc.py": "39e0d32ebc0755fd22619c7b1b03f81d6bfda0c696f03a791db6565cd40b6652",
+    "src/dust3r/losses.py": "91dfdeb599ff8f868b7432e81807679422b8f88c468a615ec53b77abb4765fcf",
+    "src/dust3r/datasets/__init__.py": "b56a0b7a3cab5a3734c56b89a54d5ba7cef00039939c741ab45c8f9738909d88",
+    "src/train.py": "ef50eab2a7ef6a2afcd5fe11f3f64d649646e8f619f83befddd3f0ff4b7b4495",
+    "eval/mv_recon/launch.py": "055518f73a6d817b24a7e805325b10063869f67a3ab01f5f0df787c8a56ea568",
+    "eval/mv_recon/data.py": "7157fa90cf4226066d54f7d39c74c3362734654c31aea452ae0931ba07a9a1c7",
+    "eval/mv_recon/base.py": "eb86162ae6902ee6d9a492e534fbb854bde9ae16ba4fdb15deb7087e4f4db674",
+    "eval/relpose/launch.py": "4d9a5dbab44c32a0f53c3a1e881c0e7251eee386808688b74b1773135ea32c97",
+    "eval/relpose/metadata.py": "02d117df2b2931d13a552b27a887e1b4b7cc9faabcdaccf13185fe3f95e058b9",
+    "eval/relpose/evo_utils.py": "d9c26e2f4c7b6211d9a43c9247192479f14f7776e838318adedcb43ba99de4c0"
+  },
+  "patched_sha256": {
+    "src/dust3r/model.py": "d911682059a197128470bde42b74b7ad2df21ca175d5fa01e5cf85f6a24c3695",
+    "src/dust3r/modules.py": "401b3cca2a5b4601c318a1b11c4970a1bba267401e149d0f386d5e96805ff2ee",
+    "src/dust3r/utils/misc.py": "33541f96c8e0382268430a7f0f5ab07df1594497fa042a2976a66f5c209a8a05",
+    "src/dust3r/losses.py": "2b735f875bf5b8fa8578c95a38473347cb0a0f9a40f8f66ee3c6780c02805753",
+    "src/dust3r/datasets/__init__.py": "c5a96f20214d1425d86178c91a2e7fe18a56ddf05deefe04bbaae46a55c5e51e",
+    "src/dust3r/datasets/oxforddn.py": "d9f026ab90dd970c5ccb9466e0cbdccb64b2037dcc3e6598aa3227af5b011b6b",
+    "src/train.py": "581475c9e00760d855970f00276f6d7ea73cd5e86842c70f00686e4486bd68a2",
+    "config/cut3r-3RAdapter.yaml": "ba4ce225f02d77121b46cc279c879c704680caa33223a2d4e25050f4cfb93743",
+    "eval/mv_recon/launch.py": "8ad79999b8cce106b1a256ddd07f9f089d91e5d76d260e18644f5eb81b00641f",
+    "eval/mv_recon/data.py": "2de8d86fb86ce2aadd4121c899ddcaba089bad4e5ba4d8c6327667a5ff252f04",
+    "eval/mv_recon/base.py": "d2397142a77f5aeb905a3bf2c8c7d2174f48da879624c71fb2c7f6f2c12a6d8c",
+    "eval/relpose/launch.py": "b12eeec0e6abe980c8945b5e1c48a4bf88f38792fc62f36f16672fa1c9345209",
+    "eval/relpose/metadata.py": "055eb20fd5c660d6a75217b0a7bb135797a1336743f4c4c864948af6a9388d8b",
+    "eval/relpose/evo_utils.py": "1f3f0f7451539ed5e092ccb6f6240040d4fb7ea2505920c7a9a3faf13df49ee4"
+  }
+}

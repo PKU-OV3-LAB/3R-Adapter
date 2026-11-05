@@ -1,0 +1,52 @@
+{
+  "status": "full_three_seed_port_verified",
+  "samples_per_seed": 204,
+  "seeds": [1111, 1112, 1113],
+  "comparison": "Every CSV column, row identity, numeric value and block17 actual post-RoPE Q/K hash against original full-run records.",
+  "attention_rows": 9792,
+  "offset_rows": 6120,
+  "numeric_cells": 640764,
+  "numeric_max_abs_diff": 0.0,
+  "numeric_mismatches": 0,
+  "qk_samples_per_seed": 204,
+  "qk_mismatches": 0,
+  "passive_hook_output_max_abs_diff": 0.0,
+  "hook_audit_scope": "Both models on the first input of every seed1111 shard; adapted model on the first input of every seed1112/1113 shard.",
+  "per_seed": [
+    {"seed": 1111, "attention_rows": 4896, "offset_rows": 2040, "exact": true},
+    {"seed": 1112, "attention_rows": 2448, "offset_rows": 2040, "exact": true},
+    {"seed": 1113, "attention_rows": 2448, "offset_rows": 2040, "exact": true}
+  ],
+  "full_token_profile": {
+    "ranks": 1369,
+    "raw_rank_and_raster_probability_max_abs_diff": 0.0,
+    "normalized_profile_max_abs_diff": 5.684341886080802e-14,
+    "normalized_profile_tolerance": 1e-12
+  },
+  "summary": {
+    "bootstrap_replicates": 10000,
+    "complete_sample_cartesian_product": true,
+    "shared_gt_support": true,
+    "cross_seed_block17_qk_identical": true,
+    "passive_hooks_verified": true
+  },
+  "provenance": {
+    "seed1111": "Completed portable evaluator before the final two input guards: fixed-manifest SHA check and maximum shard-count check. Model readout and statistics are unchanged.",
+    "seed1112_1113": "Final portable evaluator with both input guards.",
+    "samples": "Public sample paths are dataset-relative. Row metadata, GT support and actual Q/K are checked independently against the original manifest.",
+    "original_records": "The original published CSV records and their manifests are retained unchanged."
+  },
+  "runtime": {
+    "python": "3.11.14",
+    "torch": "2.9.0+cu128",
+    "torchvision": "0.24.0+cu128",
+    "numpy": "2.2.6",
+    "gpu": "NVIDIA GeForce RTX 5090"
+  },
+  "limits": [
+    "These measurements use fixed evaluation inputs and historical checkpoint weights.",
+    "Training with the corrected Oxford loader has not been repeated.",
+    "Tables 1-3 full evaluation through the release entries has not been repeated in this audit.",
+    "Fresh dependency installation across all backbones remains unverified."
+  ]
+}

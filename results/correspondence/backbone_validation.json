@@ -1,0 +1,24 @@
+{
+  "passed": true,
+  "all_frozen_backbone_tensors_identical_across_released_seeds": true,
+  "checkpoints": [
+    {
+      "seed": 1111,
+      "checkpoint_sha256": "9af9f497c8f33e1c2b0afe55ee9a11e7ed0997c5dc3b4565e960439f77a22e45",
+      "frozen_backbone_tensor_count": 1210,
+      "frozen_backbone_sha256": "d98c35e895a7f46983e557eba75fa8717c22fa223177460b9a21690d4e1cc348"
+    },
+    {
+      "seed": 1112,
+      "checkpoint_sha256": "88ab28cb540239bce04df3471500eaec436dc3d782b0c1093a327445ab106fbc",
+      "frozen_backbone_tensor_count": 1210,
+      "frozen_backbone_sha256": "d98c35e895a7f46983e557eba75fa8717c22fa223177460b9a21690d4e1cc348"
+    },
+    {
+      "seed": 1113,
+      "checkpoint_sha256": "9e549eaac29f0493ebf1d9418ff4117b04e80d9cdc15f6063261a5f9cf176d3b",
+      "frozen_backbone_tensor_count": 1210,
+      "frozen_backbone_sha256": "d98c35e895a7f46983e557eba75fa8717c22fa223177460b9a21690d4e1cc348"
+    }
+  ]
+}

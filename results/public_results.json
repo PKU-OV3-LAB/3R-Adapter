@@ -1,0 +1,91 @@
+{
+  "schema_version": 2,
+  "method": "3R-Adapter",
+  "released_scope": "author-method Table 1, Table 2, and Table 3 results",
+  "tables": {
+    "table_1": {
+      "dataset": "Oxford Day&Night",
+      "backbones": {
+        "Pi3": {
+          "adapter_parameters_millions": 3.2,
+          "decoder_layers": [17, 18, 19, 20, 21, 22, 23, 24],
+          "camera_pose": {
+            "ate": 0.2584515308032284,
+            "rpe_t": 0.19892012211349908,
+            "rpe_r": 3.198551055800437
+          },
+          "scene_reconstruction": {
+            "accuracy": 0.15183552639064338,
+            "completeness": 0.48099056315228045,
+            "chamfer": 0.6328260895429239,
+            "normal_consistency": 0.5377529957280106
+          },
+          "upstream_revision": "67de78e36b05336cf73db0131b33b347c8177e40",
+          "checkpoint_sha256": "d7398db935084cab7da96f0ff3b74d16fca12597db73639b9a349befa715837a",
+          "evidence": "A-level rerun; executable public runner included"
+        },
+        "CUT3R": {
+          "adapter_parameters_millions": 2.8,
+          "camera_pose": {
+            "ate": 0.41617,
+            "rpe_t": 0.25331,
+            "rpe_r": 4.78063
+          },
+          "scene_reconstruction": {
+            "accuracy": 0.254,
+            "completeness": 0.327,
+            "chamfer": 0.581,
+            "normal_consistency": 0.55
+          },
+          "evidence": "historical paper result; public CUT3R scene/pose runner included"
+        }
+      }
+    },
+    "table_2": {
+      "backbone": "Test3R",
+      "adapter_parameters_millions": 2.5,
+      "datasets": {
+        "7-Scenes": {
+          "accuracy": 0.094,
+          "completeness": 0.122,
+          "chamfer": 0.216,
+          "normal_consistency": 0.738,
+          "evidence": "released historical author-method result"
+        },
+        "NRGBD": {
+          "accuracy": 0.082,
+          "completeness": 0.123,
+          "chamfer": 0.205,
+          "normal_consistency": 0.879,
+          "evidence": "released rerun result"
+        }
+      },
+      "upstream_revision": "ffc35c0",
+      "runner_scope": "public runners included for all 18 7-Scenes and all nine NRGBD sequences"
+    },
+    "table_3": {
+      "dataset": "BEDLAM",
+      "backbone": "Human3R",
+      "adapter_parameters_millions": 36.1,
+      "scene_reconstruction_paper": {
+        "depth_cutoff_m": 15,
+        "accuracy": 0.135,
+        "completeness": 0.052,
+        "chamfer": 0.187
+      },
+      "scene_reconstruction_corrected": {
+        "depth_cutoff_m": 15,
+        "accuracy": 0.1393,
+        "completeness": 0.0522,
+        "chamfer": 0.1915
+      },
+      "human_mesh_reconstruction_mm": {
+        "pa_pve": 44.4,
+        "metric_pve": 218.5,
+        "pa_mpjpe": 37.6,
+        "metric_mpjpe": 217.2
+      },
+      "evidence": "paper and rerun both use the 15m scene protocol; public BEDLAM human/scene/depth runner included; numerical differences remain separately recorded"
+    }
+  }
+}

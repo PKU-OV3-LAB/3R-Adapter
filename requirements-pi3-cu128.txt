@@ -1,0 +1,25 @@
+# Pi3 evaluation/training profile used for the full correspondence audit.
+# Linux, Python 3.11, CUDA 12.8; install Torch from its cu128 wheel index.
+# Existing-environment execution is verified; a fresh install is not yet verified.
+torch==2.9.0
+torchvision==0.24.0
+numpy==2.2.6
+pillow==10.3.0
+opencv-python==4.12.0.88
+hydra-core==1.3.2
+accelerate==1.12.0
+transformers==4.57.3
+scipy==1.16.3
+huggingface-hub==0.36.0
+open3d==0.19.0
+evo==1.34.0
+plyfile
+safetensors
+hydra-colorlog
+easydict
+prettytable
+rich
+pandas
+rootutils
+matplotlib
+tensorboard

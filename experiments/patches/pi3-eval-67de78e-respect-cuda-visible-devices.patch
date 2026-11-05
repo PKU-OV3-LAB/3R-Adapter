@@ -1,0 +1,20 @@
+diff --git a/mv_recon/eval.py b/mv_recon/eval.py
+--- a/mv_recon/eval.py
++++ b/mv_recon/eval.py
+@@ -1,5 +1,5 @@
+ import os
+ os.environ['OMP_NUM_THREADS'] = '8'
+ os.environ['MKL_NUM_THREADS'] = '8'
+-os.environ['CUDA_VISIBLE_DEVICES'] = '4'
++os.environ.setdefault('CUDA_VISIBLE_DEVICES', '4')
+ os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
+diff --git a/relpose/eval_dist.py b/relpose/eval_dist.py
+--- a/relpose/eval_dist.py
++++ b/relpose/eval_dist.py
+@@ -1,5 +1,5 @@
+ import os
+ os.environ['OMP_NUM_THREADS'] = '8'
+ os.environ['MKL_NUM_THREADS'] = '8'
+-os.environ['CUDA_VISIBLE_DEVICES'] = '1'
++os.environ.setdefault('CUDA_VISIBLE_DEVICES', '1')
+ os.environ['CUDA_LAUNCH_BLOCKING'] = '1'

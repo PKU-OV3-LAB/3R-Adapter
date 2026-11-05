@@ -1,0 +1,68 @@
+# @package _global_
+
+train_dataset:
+    length: 10000000         # dummy
+
+    weights: 
+        OxfordDayAndNight: 4000
+
+    OxfordDayAndNight:
+        _target_: datasets.oxforddn_dataset.OxfordDayAndNight
+        data_root: data/oxford-day-and-night
+        z_far: 80
+        frame_num: 8
+        aug_crop: 16
+        transform:
+            _partial_: true
+            _target_: datasets.base.transforms.JitterJpegLossBlurring
+        aug_focal: 0.9
+        mode: 'train'
+        light_condition: 'day_night'
+        scene_split: 'within_scene'
+
+
+train_dataloader:
+    drop_last: True
+    shuffle: True
+
+test_dataset:
+    weights: 
+        OxfordDayAndNight: 1000
+
+    ScanNet:
+        _target_: datasets.scannet_dataset.ScannetDataset
+        z_far: 80
+        frame_num: 8
+        resolution:
+            - [518, 336]
+        transform:
+            _partial_: true
+            _target_: datasets.base.transforms.ImgToTensor
+        mode: 'test'
+
+    CO3DV2:
+        _target_: datasets.co3dv2_dataset.CO3DV2Dataset
+        z_far: 0
+        frame_num: 8
+        resolution:
+            - [518, 336]
+        transform:
+            _partial_: true
+            _target_: datasets.base.transforms.ImgToTensor
+        mode: 'test'
+    
+    OxfordDayAndNight:
+        _target_: datasets.oxforddn_dataset.OxfordDayAndNight
+        data_root: data/oxford-day-and-night
+        z_far: 80
+        frame_num: 8
+        resolution:
+            - [518, 518]
+        transform:
+            _partial_: true
+            _target_: datasets.base.transforms.ImgToTensor
+        mode: 'test'
+
+test_dataloader:
+    drop_last: False
+    shuffle: False

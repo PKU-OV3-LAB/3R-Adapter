@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "backbone": "pi3",
+  "dataset": "Oxford Day&Night",
+  "seeds": [1111, 1112, 1113],
+  "default_seed": 1111,
+  "grid_layout": "pixel_center",
+  "sampling_layout": "reference_major",
+  "region_scale": 0.2,
+  "fusion_factor": 0.1,
+  "residual_scale": 0.3,
+  "reduction_dim": 128,
+  "samples_per_reference": 4,
+  "decoder_layers": [17, 18, 19, 20, 21, 22, 23, 24],
+  "checkpoint_template": "pi3/seed{seed}/pytorch_model.bin",
+  "checkpoint_selection": "minimum validation loss within each seed",
+  "training": {
+    "config_name": "peft_3radapter_highres",
+    "seed_key": "random_seed",
+    "overrides": {
+      "train.distributed": "false",
+      "train.world_size": "1",
+      "train.rank": "0",
+      "train.gpu": "0",
+      "train.num_workers": "2",
+      "train.dynamic_compile": "false",
+      "train.num_epoch": "20",
+      "train.iters_per_epoch": "800",
+      "model.peft_layers": "[[],[17,18,19,20,21,22,23,24]]",
+      "log.ckpt_interval": "20",
+      "log.max_checkpoints": "1"
+    }
+  },
+  "evaluation": {
+    "sequences": 51,
+    "tasks": ["mv", "relpose"],
+    "aggregation": "arithmetic mean of metrics from three independent seed checkpoints; sample standard deviation (ddof=1)"
+  }
+}

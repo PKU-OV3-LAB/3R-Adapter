@@ -1,0 +1,34 @@
+{
+  "revision": "622cfc648eda04b42355df1e021293585d794ab2",
+  "base_normalized_sha256": {
+    "src/dust3r/model.py": "0647de9e5c2d03958d7f997080b5b27898d575e02a94da8371eead85d8db7418",
+    "src/dust3r/modules.py": "5fe01165b17ca453c3fff9b991140c7ec01b56c19641922e09fdae08ec1df603",
+    "src/dust3r/heads/dpt_head.py": "bd776c0c879ee02edcc806983ebd60c0ceddf278d9c1bd036b57ca8e4e0efb0d",
+    "src/dust3r/smpl_model.py": "b78c68076e1aece300f16bc3fa39d48a72c9550c4a8a32b051f7ceb047ee2820",
+    "src/dust3r/utils/smpl_layer.py": "a2708328db7772f464dd6f610c95f2f8522613e01f12bd70c87f9ee660ba049b",
+    "src/dust3r/utils/render.py": "b9f2d315f2f2e7b1e68f4cc8506883e66cea61943f2962738418abb6daa25e38",
+    "src/train.py": "80f7c1fcfdea95fb16c2614a70f174899b0739b77e961c4c8f91302abde35906",
+    "src/dust3r/losses.py": "339918bc9013e651ea3c8fdebd3cec59b7cb1712da69637be2c37444d42df5b4",
+    "src/dust3r/datasets/bedlam.py": "53a9924b648874a3dfebfa3c374ccd61158111a5fb9a8c5f6aa614724be67daa",
+    "eval/global_human/launch.py": "a3fabd99ee442c3e37726fbcc05c26a9a43c90474e2a8e418c657c361c5cb00a",
+    "eval/global_human/criterion.py": "7218c6c0462cb16c309490c24082bb3dd0742abd83ed4b57155dd9f544d2175e",
+    "eval/global_human/utils.py": "594cad7427d8b5df0519324a4a8ed324f1914401d4dc6acb74f471ae675746f3",
+    "eval/global_human/metadata.py": "b7ade1596c2f0fa2b0876844897df24c484bcdf6ea71aac5718b11e6e611b6fc"
+  },
+  "patched_sha256": {
+    "src/dust3r/model.py": "de2945c820d8765a341b2ac2593602fb9b8979c426d89b57d10b40399a878945",
+    "src/dust3r/modules.py": "8d9b94bf39ad7f46e372466c804e78399c224b25293d7b9a25906576caee004f",
+    "src/dust3r/heads/dpt_head.py": "2973686595408000ecbc00d02242f33594aea5ecf6fc820a29a80cb86c037abb",
+    "src/dust3r/smpl_model.py": "e1261f5a5b86c8b3deb6eca795ba19f5b1216ea4d5129f046cb2110600f6947d",
+    "src/dust3r/utils/smpl_layer.py": "dfc351f3f4a36c4e199edc5f587ecfc4ad38eb672eadc97969decd16f4bdb621",
+    "src/dust3r/utils/render.py": "8093d69c3bc220efda722bce57fc72ca35e6b2beabf780171f60ae7d36dc3038",
+    "src/train.py": "e13e00dcfdd0c6f83ce32d7b5443022511d8fa6e1c3226ab2aa8e2e6b378d4f5",
+    "src/dust3r/losses.py": "61df5b9efb1ca606dbe6cef55581091dee30dc727d6737b79bea644ed2c481ca",
+    "src/dust3r/datasets/bedlam.py": "bbb952533c61e5dc041afabc1869d4a35ad7769e4a672c5fa7b39ab11f28d849",
+    "config/train_human3r_adapter-bedlam.yaml": "8adf5b6a01c9940157f289e0acfa609bc99f0002383bfb2a9af250887b849635",
+    "eval/global_human/launch.py": "0bf2fe91547b284124237cb1891fa03bebb7992f5d91af67de80df0dff8e42d4",
+    "eval/global_human/criterion.py": "bbd8ee178b4beb825ad9213352bea3d0ed1ce05d7065057d9f9dc4aa63d217aa",
+    "eval/global_human/utils.py": "0c0d7e1e8563be7c4304f65f2d7e2e2be69860de8b99e2c0fd18dee22787a1b3",
+    "eval/global_human/metadata.py": "d23147556be558cd252db70172a5fc55aabbbaed61a9e8acfbc8d820d3f16a65"
+  }
+}
