@@ -4,17 +4,19 @@
   <a href="https://azx030512.github.io/">Zixiang Ai</a><sup>1</sup>&emsp;
   Zhenyu Cui<sup>2</sup>&emsp;
   Xu Zou<sup>3</sup>&emsp;
-  <a href="https://zhoujiahuan1991.github.io/">Jiahuan Zhou</a><sup>†</sup><sup>1</sup><br>
-  <small>
-    <sup>1</sup> Peking University<br>
-    <sup>2</sup> Tsinghua University<br>
-    <sup>3</sup> Huazhong University of Science and Technology
-  </small>
+  <a href="https://zhoujiahuan1991.github.io/">Jiahuan Zhou</a><sup>†</sup><sup>1</sup>
+</div>
+
+<div align="center">
+  <sup>1 Peking University&emsp; 2 Tsinghua University&emsp; 3 Huazhong University of Science and Technology</sup>
 </div>
 
 <p align="center">
   <a href="https://arxiv.org/abs/2611.11964"><img src="https://img.shields.io/badge/Arxiv-2611.11964-A42C25.svg?logo=arXiv" alt="arXiv:2611.11964"></a>
   <a href="https://github.com/PKU-OV3-LAB/3R-Adapter"><img src="https://hitscounter.dev/api/hit?url=https%3A%2F%2Fgithub.com%2FPKU-OV3-LAB%2F3R-Adapter&amp;label=3R-Adapter&amp;icon=github&amp;color=%230a58ca" alt="3R-Adapter repository visits"></a>
+  <a href="https://pku-ov3-lab.github.io/3R-Adapter/"><img src="https://img.shields.io/badge/Project-Page-4285F4.svg?logo=googlechrome&amp;logoColor=white" alt="Project Page"></a>
+  <a href="https://arxiv.org/pdf/2611.11964"><img src="https://img.shields.io/badge/Paper-PDF-A42C25.svg?logo=arXiv&amp;logoColor=white" alt="Paper PDF"></a>
+  <a href="https://pku-ov3-lab.github.io/3R-Adapter/#video"><img src="https://img.shields.io/badge/Video-Talk-FF0000.svg?logo=youtube&amp;logoColor=white" alt="Video Talk"></a>
 </p>
 
 <div align="center">
@@ -22,12 +24,6 @@
   <br><br>
   The paper has been accepted as <b>NeurIPS 2026 Spotlight</b>.
 </div>
-
-<p align="center">
-  <a href="https://pku-ov3-lab.github.io/3R-Adapter/">Project Page</a> ·
-  <a href="https://arxiv.org/pdf/2611.11964">Paper PDF</a> ·
-  <a href="https://pku-ov3-lab.github.io/3R-Adapter/#video">Video</a>
-</p>
 
 ## Overview
 
