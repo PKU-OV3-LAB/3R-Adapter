@@ -19,3 +19,19 @@ version: 0.1.2
 date-released: 2026-11-06
 repository-code: "https://github.com/PKU-OV3-LAB/3R-Adapter"
 url: "https://pku-ov3-lab.github.io/3R-Adapter/"
+preferred-citation:
+  type: article
+  title: "3R-Adapter: Retrieval, Rewiring, and Refinement for Efficient Adaptation of 3D Reconstruction Model"
+  authors:
+    - family-names: Ai
+      given-names: Zixiang
+    - family-names: Cui
+      given-names: Zhenyu
+    - family-names: Zou
+      given-names: Xu
+    - family-names: Zhou
+      given-names: Jiahuan
+  journal: arXiv
+  year: 2026
+  doi: 10.48550/arXiv.2611.11964
+  url: "https://arxiv.org/abs/2611.11964"

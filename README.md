@@ -4,33 +4,45 @@
   <a href="https://azx030512.github.io/">Zixiang Ai</a><sup>1</sup>&emsp;
   Zhenyu Cui<sup>2</sup>&emsp;
   Xu Zou<sup>3</sup>&emsp;
-  <a href="https://zhoujiahuan1991.github.io/">Jiahuan Zhou</a><sup>1,†</sup>
+  <a href="https://zhoujiahuan1991.github.io/">Jiahuan Zhou</a><sup>†</sup><sup>1</sup><br>
+  <small>
+    <sup>1</sup> Peking University<br>
+    <sup>2</sup> Tsinghua University<br>
+    <sup>3</sup> Huazhong University of Science and Technology
+  </small>
 </div>
-
-<div align="center">
-  <sup>1</sup>Peking University&emsp;
-  <sup>2</sup>Tsinghua University&emsp;
-  <sup>3</sup>Huazhong University of Science and Technology
-</div>
-
-<p align="center"><sup>†</sup>Corresponding author</p>
 
 <p align="center">
-  <strong>NeurIPS 2026 Spotlight</strong><br>
+  <a href="https://arxiv.org/abs/2611.11964"><img src="https://img.shields.io/badge/Arxiv-2611.11964-A42C25.svg?logo=arXiv" alt="arXiv:2611.11964"></a>
+  <a href="https://github.com/PKU-OV3-LAB/3R-Adapter"><img src="https://hitscounter.dev/api/hit?url=https%3A%2F%2Fgithub.com%2FPKU-OV3-LAB%2F3R-Adapter&amp;label=3R-Adapter&amp;icon=github&amp;color=%230a58ca" alt="3R-Adapter repository visits"></a>
+</p>
+
+<div align="center">
+  Official implementation of <b>3R-Adapter: Retrieval, Rewiring, and Refinement for Efficient Adaptation of 3D Reconstruction Model</b>.
+  <br><br>
+  The paper has been accepted as <b>NeurIPS 2026 Spotlight</b>.
+</div>
+
+<p align="center">
   <a href="https://pku-ov3-lab.github.io/3R-Adapter/">Project Page</a> ·
-  <a href="https://pku-ov3-lab.github.io/3R-Adapter/assets/3r-adapter-paper.pdf">Paper</a> ·
+  <a href="https://arxiv.org/pdf/2611.11964">Paper PDF</a> ·
   <a href="https://pku-ov3-lab.github.io/3R-Adapter/#video">Video</a>
 </p>
 
-<p align="center">
-  <img src="https://pku-ov3-lab.github.io/3R-Adapter/assets/pipeline.png" width="100%" alt="3R-Adapter pipeline">
-</p>
+## Overview
 
-Official implementation of **3R-Adapter**, a relation-centric framework for
+**3R-Adapter** is a relation-centric framework for
 parameter-efficient adaptation of pretrained 3D reconstruction models.
 Deformable Retrieval searches for cross-view evidence, Relational Rewiring
 constructs sparse associations, and Consistency Refinement injects the
 recovered relations into a frozen backbone.
+
+We evaluate 3R-Adapter on low-light reconstruction and camera pose estimation,
+self-supervised test-time adaptation, and joint human-scene reconstruction.
+
+<p align="center">
+  <img src="https://pku-ov3-lab.github.io/3R-Adapter/assets/pipeline.png" width="100%" alt="3R-Adapter pipeline">
+</p>
 
 ## Installation
 
@@ -47,24 +59,6 @@ Use Python 3.10+ and install the selected backbone's dependencies from
 python -m pip install torch==2.9.0 torchvision==0.24.0 --index-url https://download.pytorch.org/whl/cu128
 python -m pip install -r requirements-pi3-cu128.txt
 ```
-
-## Code structure
-
-```text
-adapter3r/
-  core.py          # Shared 3R-Adapter module
-  integrations/    # Backbone integration helpers
-  runners/         # Training, evaluation and online adaptation
-  analysis/        # Correspondence measurements and result processing
-configs/           # Adapter configurations
-third_party/       # Bundled backbone source
-documentation/     # Task setup and reference material
-tests/             # Validation
-```
-
-All tasks use `python -m adapter3r`. Run a command with `--help` to see its
-options. [Task setup](documentation/tasks.md) describes data layouts and
-additional configuration.
 
 ## Pretrained weights
 
@@ -86,7 +80,13 @@ gdown 1Asz-ZB3FfpzZYwunhQvNPZEUA8XUNAYD \
   -O checkpoints/CUT3R/cut3r_512_dpt_4_64.pth
 ```
 
-## Low-light reconstruction and camera pose estimation
+## Usage
+
+All tasks use `python -m adapter3r`. Append `--help` to a command to see its
+options. [Task setup](documentation/tasks.md) describes data layouts and
+additional configuration.
+
+### Low-light reconstruction and camera pose estimation
 
 Prepare the processed Oxford Day&Night dataset:
 
@@ -94,7 +94,7 @@ Prepare the processed Oxford Day&Night dataset:
 export OXFORD_DATA=/absolute/path/to/processed/oxford-day-and-night
 ```
 
-### Pi3 + 3R-Adapter
+#### Pi3 + 3R-Adapter
 
 Train from the official base weights, then evaluate reconstruction and pose:
 
@@ -110,7 +110,7 @@ python -m adapter3r evaluate --backbone pi3 \
   --gpu 0 --output-dir outputs/pi3_eval
 ```
 
-### CUT3R + 3R-Adapter
+#### CUT3R + 3R-Adapter
 
 ```bash
 python -m adapter3r train --backbone cut3r \
@@ -124,7 +124,7 @@ python -m adapter3r evaluate --backbone cut3r \
   --output-dir outputs/cut3r_eval
 ```
 
-## Self-supervised test-time adaptation
+### Self-supervised test-time adaptation
 
 Start each test sequence from a base DUSt3R checkpoint:
 
@@ -138,7 +138,7 @@ python -m adapter3r adapt --dataset nrgbd \
   --gpu 0 --output-dir outputs/tta_nrgbd
 ```
 
-## Joint human-scene reconstruction
+### Joint human-scene reconstruction
 
 Following Human3R's joint reconstruction pipeline, initialize the scene
 backbone from **CUT3R** and the human branch from **Multi-HMR**, then adapt
@@ -157,15 +157,34 @@ python -m adapter3r evaluate --backbone human3r \
   --gpu 0 --output-dir outputs/bedlam_eval
 ```
 
+## Code structure
+
+```text
+adapter3r/
+  core.py          # Shared 3R-Adapter module
+  integrations/    # Backbone integration helpers
+  runners/         # Training, evaluation and online adaptation
+  analysis/        # Correspondence measurements and result processing
+configs/           # Adapter configurations
+third_party/       # Bundled backbone source
+documentation/     # Task setup and reference material
+tests/             # Validation
+```
+
 ## Citation
 
+If you find our paper and code useful in your research, please cite:
+
 ```bibtex
-@inproceedings{ai2026threeRAdapter,
-  title     = {3R-Adapter: Retrieval, Rewiring, and Refinement
-               for Efficient Adaptation of 3D Reconstruction Model},
-  author    = {Ai, Zixiang and Cui, Zhenyu and Zou, Xu and Zhou, Jiahuan},
-  booktitle = {Advances in Neural Information Processing Systems},
-  year      = {2026}
+@misc{ai20263radapterretrievalrewiringrefinement,
+  title         = {3R-Adapter: Retrieval, Rewiring, and Refinement
+                   for Efficient Adaptation of 3D Reconstruction Model},
+  author        = {Zixiang Ai and Zhenyu Cui and Xu Zou and Jiahuan Zhou},
+  year          = {2026},
+  eprint        = {2611.11964},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.CV},
+  url           = {https://arxiv.org/abs/2611.11964}
 }
 ```
 
