@@ -57,8 +57,8 @@ python -m pip install -r requirements-pi3-cu128.txt
 
 ## Pretrained weights
 
-**Trained 3R-Adapter weights have not yet been published.** Download the
-official base weights and train the adapter with the commands below.
+Download the pretrained backbone weights below to initialize 3R-Adapter
+training.
 
 - **Pi3:** [model.safetensors](https://huggingface.co/yyfz233/Pi3/resolve/main/model.safetensors)
   and [config.json](https://huggingface.co/yyfz233/Pi3/resolve/main/config.json).
@@ -135,10 +135,8 @@ python -m adapter3r adapt --dataset nrgbd \
 
 ### Joint human-scene reconstruction
 
-Following Human3R's joint reconstruction pipeline, initialize the scene
-backbone from **CUT3R** and the human branch from **Multi-HMR**, then adapt
-on BEDLAM. In these commands, `human3r` selects the joint reconstruction
-implementation; it does not denote a pretrained Human3R checkpoint.
+Initialize the joint reconstruction model with **CUT3R** scene weights and
+**Multi-HMR** human weights, then train 3R-Adapter on BEDLAM.
 
 ```bash
 python -m adapter3r train --backbone human3r \
